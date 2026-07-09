@@ -220,3 +220,14 @@ tr:last-child td { border-bottom: none; }
   table.responsive-table td::before { display: block; max-width: none; margin-bottom: 4px; }
   table.responsive-table td:last-child { display: flex; }
 }
+
+@media (max-width: 760px) {
+  html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
+  .app, .main, .content, .page, .card, .card-body, .topbar { min-width: 0; max-width: 100%; overflow-x: hidden; }
+  .topbar-actions { min-width: 0; max-width: 100%; }
+  .nav, .tabs { max-width: 100%; min-width: 0; overflow-x: auto; overflow-y: hidden; }
+  .nav > a { flex: 0 0 auto; text-decoration: none; }
+  .nav > a .nav-item { width: max-content; }
+  .topbar-actions .btn { max-width: 100%; white-space: normal; }
+  .empty { padding-left: 12px; padding-right: 12px; }
+}
