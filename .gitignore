@@ -15,6 +15,9 @@ data/pets.json
 data/bookings.json
 data/xero_tokens.json
 
+# Local secret helpers
+/turso-access.txt
+
 # OS / editor
 .DS_Store
 Thumbs.db

@@ -2,6 +2,7 @@
 
 - **Client membership portal** (`/index.html`) — clients sign up, add their dogs (with photo, vaccination card, vaccination/deworming/tick & flea dates), and book services from the real price list.
 - **Admin dashboard** (`/admin.html`) — manage all bookings, search/view every client's full dog medical record, and invoice via Xero.
+- **Turso-backed data layer** — runtime app state is stored server-side in Turso (`app_state` table) when `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are configured; JSON files remain a local/offline fallback.
 - **Real Xero integration** — invoicing a booking creates/reuses the customer as a Xero contact, creates an authorised invoice, and emails it from Xero.
 
 ## 1. Install
@@ -57,6 +58,11 @@ server.js / xero.js / db.js
 public/index.html   — client portal
 public/admin.html   — admin dashboard
 public/style.css / app.js
-data/                — JSON "database" (auto-created)
+data/                — JSON "database" fallback + seed files
 .env.example
 ```
+
+## Turso database
+When `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are set, `db.js` initializes a Turso `app_state` table and stores the app datasets (`customers`, `pets`, `bookings`, `services`, `locations`, `xeroTokens`) as server-side JSON values. This keeps the existing app code simple while moving runtime data off Render's ephemeral filesystem.
+
+For local/offline development without Turso env vars, the app still falls back to `data/*.json`.

@@ -484,4 +484,11 @@ app.post('/api/admin/bookings/:id/invoice', requireAdmin, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Furry Kidz booking system running on http://localhost:${PORT}`));
+db.init()
+  .then(() => {
+    app.listen(PORT, () => console.log(`Furry Kidz booking system running on http://localhost:${PORT} (${db.getStorageMode()} storage)`));
+  })
+  .catch((err) => {
+    console.error('Failed to initialize storage:', err);
+    process.exit(1);
+  });
