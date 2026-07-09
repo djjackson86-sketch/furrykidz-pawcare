@@ -1,0 +1,12 @@
+[
+  {
+    "id": "kyalami",
+    "name": "Kyalami",
+    "boardingCapacity": 15
+  },
+  {
+    "id": "noordwyk",
+    "name": "Noordwyk",
+    "boardingCapacity": 15
+  }
+]

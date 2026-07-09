@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Furry Kidz — Collections & Deliveries</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+.collection-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); margin-bottom: 14px; overflow: hidden; }
+.collection-head { padding: 14px 18px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); }
+.collection-direction { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
+.collection-direction.pickup { background: var(--blue-light); color: var(--blue); }
+.collection-direction.dropoff { background: var(--green-light); color: var(--green); }
+.collection-date { font-size: 13px; font-weight: 600; }
+.collection-reason { font-size: 12px; color: var(--text3); margin-top: 1px; }
+.collection-body { padding: 16px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.collection-col label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text3); font-weight: 600; margin-bottom: 3px; display: block; }
+.collection-val { font-size: 13.5px; margin-bottom: 12px; }
+.collection-val a { color: var(--accent); text-decoration: none; }
+.notes-box { width: 100%; min-height: 60px; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 13px; font-family: inherit; resize: vertical; }
+.day-group-label { font-size: 12px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin: 22px 0 10px; }
+.day-group-label:first-child { margin-top: 0; }
+.pet-thumb { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+@media (max-width: 700px) { .collection-body { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div id="auth-screen" class="auth-wrap" style="display:none">
+  <div class="auth-card">
+    <div class="auth-title">Staff Login</div>
+    <div class="auth-sub">Collections & Deliveries — staff access only</div>
+    <div class="error-banner" id="auth-error"></div>
+    <form id="staff-login-form">
+      <div class="form-row"><label>Staff Password</label><input type="password" id="staff-password" required></div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">Log In</button>
+    </form>
+  </div>
+</div>
+
+<div id="main-app" style="display:none">
+  <div class="topbar" style="position:sticky;top:0;z-index:10">
+    <div>
+      <div class="topbar-title">🚐 Collections & Deliveries</div>
+      <div class="topbar-sub">Every pickup and dropoff, in order</div>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-secondary btn-sm" onclick="loadCollections()">↻ Refresh</button>
+      <button class="btn btn-secondary btn-sm" onclick="logout()">↩ Log Out</button>
+    </div>
+  </div>
+  <div class="content" style="max-width:780px">
+    <div id="collections-list"></div>
+    <div class="empty" id="collections-empty" style="display:none"><div class="empty-icon">🚐</div><div>No collections or deliveries scheduled</div></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+async function init() {
+  try { await api('GET', '/api/staff/collections'); showApp(); } catch { showAuth(); }
+}
+function showAuth() { document.getElementById('auth-screen').style.display = 'block'; document.getElementById('main-app').style.display = 'none'; }
+function showApp() { document.getElementById('auth-screen').style.display = 'none'; document.getElementById('main-app').style.display = 'block'; loadCollections(); }
+
+document.getElementById('staff-login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try { await api('POST', '/api/staff/login', { password: document.getElementById('staff-password').value }); showApp(); }
+  catch (err) { const el = document.getElementById('auth-error'); el.textContent = err.message; el.classList.add('show'); }
+});
+
+async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); location.reload(); }
+
+function fmtDateLabel(dateStr) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(dateStr + 'T00:00:00');
+  const diffDays = Math.round((d - today) / 86400000);
+  const weekday = d.toLocaleDateString('en-ZA', { weekday: 'long' });
+  const full = d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'long' });
+  if (diffDays === 0) return `Today — ${full}`;
+  if (diffDays === 1) return `Tomorrow — ${full}`;
+  if (diffDays < 0) return `${weekday}, ${full} (past)`;
+  return `${weekday}, ${full}`;
+}
+
+async function loadCollections() {
+  const { items } = await api('GET', '/api/staff/collections');
+  const list = document.getElementById('collections-list');
+  document.getElementById('collections-empty').style.display = items.length ? 'none' : 'block';
+  list.innerHTML = '';
+
+  let lastDate = null;
+  items.forEach((it) => {
+    if (it.date !== lastDate) {
+      lastDate = it.date;
+      const label = document.createElement('div');
+      label.className = 'day-group-label';
+      label.textContent = fmtDateLabel(it.date);
+      list.appendChild(label);
+    }
+
+    const card = document.createElement('div');
+    card.className = 'collection-card';
+    card.innerHTML = `
+      <div class="collection-head">
+        ${it.petPhotoBase64 ? `<img class="pet-thumb" src="${it.petPhotoBase64}">` : '<div class="pet-thumb" style="background:var(--accent-light);display:flex;align-items:center;justify-content:center">🐶</div>'}
+        <div style="flex:1">
+          <div class="collection-date">${it.petName} — ${it.customerName}${it.time ? ' · ' + it.time : ''}</div>
+          <div class="collection-reason">${it.reason}</div>
+        </div>
+        <span class="collection-direction ${it.direction}">${it.direction === 'pickup' ? '📥 Collect' : '📤 Drop off'}</span>
+        <span class="status status-${it.status}" style="margin-left:8px">${it.status}</span>
+      </div>
+      <div class="collection-body">
+        <div class="collection-col">
+          <label>Customer Phone</label>
+          <div class="collection-val">${it.customerPhone ? `<a href="tel:${it.customerPhone}">${it.customerPhone}</a>` : '—'}</div>
+          <label>Emergency Contact</label>
+          <div class="collection-val">${it.customerEmergencyNumber || '—'}</div>
+          <label>Address</label>
+          <div class="collection-val">${it.address || '—'}${it.mapsUrl ? `<br><a href="${it.mapsUrl}" target="_blank">📍 Navigate there →</a>` : ''}</div>
+          ${it.petNotes ? `<label>Dog Notes</label><div class="collection-val">${it.petNotes}</div>` : ''}
+        </div>
+        <div class="collection-col">
+          <label>📥 Collection message (for picking the dog up)</label>
+          <textarea class="notes-box" data-booking="${it.bookingId}" data-field="collectionNotes" placeholder="e.g. gate code 4471, dog is in the back yard, ring twice">${it.collectionNotes}</textarea>
+          <div style="margin-top:10px"></div>
+          <label>📤 Drop-off message (for returning the dog)</label>
+          <textarea class="notes-box" data-booking="${it.bookingId}" data-field="dropoffNotes" placeholder="e.g. leave with neighbour at no. 14 if nobody home">${it.dropoffNotes}</textarea>
+          <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="saveNotes(this, '${it.bookingId}')">Save Notes</button>
+        </div>
+      </div>`;
+    list.appendChild(card);
+  });
+}
+
+async function saveNotes(btn, bookingId) {
+  const card = btn.closest('.collection-card');
+  const collectionNotes = card.querySelector('[data-field="collectionNotes"]').value;
+  const dropoffNotes = card.querySelector('[data-field="dropoffNotes"]').value;
+  try {
+    await api('PUT', `/api/staff/bookings/${bookingId}/notes`, { collectionNotes, dropoffNotes });
+    toast('Notes saved');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+init();
+</script>
+</body>
+</html>

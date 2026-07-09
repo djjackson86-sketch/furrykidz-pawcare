@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Furry Kidz Member Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="auth-screen" class="auth-wrap" style="display:none">
+  <div class="auth-card">
+    <div class="auth-title" id="auth-title">Welcome back</div>
+    <div class="auth-sub" id="auth-sub">Log in to manage your dog's bookings</div>
+    <div class="error-banner" id="auth-error"></div>
+
+    <form id="login-form">
+      <div class="form-row"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-row"><label>Password</label><input type="password" id="login-password" required></div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">Log In</button>
+    </form>
+
+    <form id="register-form" style="display:none">
+      <div class="form-row-2">
+        <div><label>First name</label><input id="reg-first" required></div>
+        <div><label>Last name</label><input id="reg-last" required></div>
+      </div>
+      <div class="form-row"><label>Email</label><input type="email" id="reg-email" required></div>
+      <div class="form-row-2">
+        <div><label>Phone</label><input id="reg-phone" placeholder="082 000 0000"></div>
+        <div><label>Preferred location</label><select id="reg-location"><option value="kyalami">Kyalami</option><option value="noordwyk">Noordwyk</option></select></div>
+      </div>
+      <div class="form-row"><label>Daycare package</label>
+        <select id="reg-package"><option value="adhoc">Adhoc — pay per visit</option><option value="recurring">Recurring — invoiced 1st of month</option></select>
+      </div>
+      <div class="form-row"><label>Password</label><input type="password" id="reg-password" required></div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">Create Account</button>
+    </form>
+
+    <div class="auth-switch" id="auth-switch">Don't have an account? <a onclick="showRegister()">Sign up</a></div>
+  </div>
+</div>
+
+<div class="app" id="main-app" style="display:none">
+  <aside class="sidebar">
+    <div class="logo"><div class="logo-icon">🐾</div><div><div class="logo-text">Furry Kidz</div><div class="logo-sub">Member Portal</div></div></div>
+    <nav class="nav">
+      <div class="nav-item active" data-page="bookings" onclick="navigate('bookings')">📅 My Bookings</div>
+      <div class="nav-item" data-page="calendar" onclick="navigate('calendar')">🗓 Calendar</div>
+      <div class="nav-item" data-page="pets" onclick="navigate('pets')">🐶 My Dogs</div>
+      <div class="nav-item" data-page="profile" onclick="navigate('profile')">👤 My Profile</div>
+    </nav>
+    <div class="sidebar-footer">
+      <div id="sidebar-name" style="color:#fff;font-weight:500;margin-bottom:8px"></div>
+      <div class="nav-item" style="padding:8px 0" onclick="logout()">↩ Log Out</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div><div class="topbar-title" id="page-title">My Bookings</div><div class="topbar-sub" id="page-sub">Your upcoming and past appointments</div></div>
+      <div class="topbar-actions" id="topbar-actions"></div>
+    </div>
+
+    <div class="content">
+      <div class="page active" id="page-bookings">
+        <div class="card"><div class="card-body">
+          <table>
+            <thead><tr><th>Date</th><th>Service</th><th>Dog</th><th>Status</th><th>Invoice</th><th></th></tr></thead>
+            <tbody id="bookings-tbody"></tbody>
+          </table>
+          <div class="empty" id="bookings-empty" style="display:none"><div class="empty-icon">📅</div><div>No bookings yet — make your first one above.</div></div>
+        </div></div>
+      </div>
+
+      <div class="page" id="page-calendar">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title" id="cal-label">July 2026</div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-secondary btn-sm" onclick="calShift(-1)">←</button>
+              <button class="btn btn-secondary btn-sm" onclick="calShift(1)">→</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="cal-grid cal-head">
+              <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+            </div>
+            <div class="cal-grid" id="cal-body"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page" id="page-pets">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Your Dogs</div></div>
+          <div class="card-body" id="pets-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Add a Dog</div></div>
+          <div class="card-body">
+            <form id="pet-form">
+              <div class="form-row-2">
+                <div><label>Name</label><input id="pet-name" required></div>
+                <div><label>Breed</label><input id="pet-breed"></div>
+              </div>
+              <div class="form-row-2">
+                <div><label>Age</label><input id="pet-age" placeholder="e.g. 3 years"></div>
+                <div><label>Weight (kg)</label><input id="pet-weight" placeholder="e.g. 12.5"></div>
+              </div>
+              <div class="form-row"><label>Notes (allergies, temperament, behaviour)</label><textarea id="pet-notes"></textarea></div>
+              <div class="form-row"><label>Photo of your dog</label><input type="file" id="pet-photo" accept="image/*"></div>
+              <div class="form-row"><label>Vaccination card (photo or scan) — required for boarding/daycare</label><input type="file" id="pet-vacc-file" accept="image/*"></div>
+              <div class="form-row-3">
+                <div><label>Vaccination date</label><input type="date" id="pet-vacc-date"></div>
+                <div><label>Last deworming date</label><input type="date" id="pet-deworm-date"></div>
+                <div><label>Last tick & flea treatment</label><input type="date" id="pet-tick-date"></div>
+              </div>
+              <div class="form-row">
+                <label>Is your dog sterilised? (required if over 6 months)</label>
+                <select id="pet-sterilised">
+                  <option value="unknown">— Select —</option>
+                  <option value="yes">Yes, sterilised</option>
+                  <option value="under_6_months">No, still under 6 months</option>
+                  <option value="no_vet_advice">No, under vet advice</option>
+                  <option value="no_acknowledge">No, I acknowledge the risk (dogs on heat not accepted)</option>
+                </select>
+              </div>
+              <div class="form-row-3">
+                <div><label>Food type</label>
+                  <select id="pet-food-type"><option value="">— Select —</option><option>Dry pellets</option><option>Raw food</option><option>Wet food</option><option>Vegetables</option><option>Other</option></select>
+                </div>
+                <div><label>Amount per meal</label><input id="pet-food-amount" placeholder="e.g. 1 cup"></div>
+                <div><label>Meals per day</label>
+                  <select id="pet-food-freq"><option value="">— Select —</option><option>Once</option><option>Twice</option><option>Three times</option><option>Four times</option></select>
+                </div>
+              </div>
+              <div class="form-row">
+                <label>Does your dog need medication?</label>
+                <select id="pet-medication" onchange="document.getElementById('pet-med-details-row').style.display=this.value==='yes'?'block':'none'">
+                  <option value="no">No</option><option value="yes">Yes</option>
+                </select>
+              </div>
+              <div class="form-row" id="pet-med-details-row" style="display:none">
+                <label>Medication details & dosage</label><textarea id="pet-med-details"></textarea>
+              </div>
+              <button class="btn btn-primary" type="submit">Add Dog</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="page" id="page-profile">
+        <div class="card">
+          <div class="card-header"><div class="card-title">My Details</div></div>
+          <div class="card-body">
+            <form id="profile-form">
+              <div class="form-row-2"><div><label>First name</label><input id="profile-first"></div><div><label>Last name</label><input id="profile-last"></div></div>
+              <div class="form-row"><label>Email</label><input id="profile-email" disabled></div>
+              <div class="form-row-2"><div><label>Phone</label><input id="profile-phone"></div><div><label>Emergency contact number</label><input id="profile-emergency"></div></div>
+              <div class="form-row"><label>Address</label><textarea id="profile-address"></textarea></div>
+              <div class="form-row-2">
+                <div><label>Preferred location</label><select id="profile-location"><option value="kyalami">Kyalami</option><option value="noordwyk">Noordwyk</option></select></div>
+                <div><label>Daycare package</label>
+                  <select id="profile-package">
+                    <option value="adhoc">Adhoc — pay per visit</option>
+                    <option value="recurring">Recurring — invoiced 1st of month</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row"><label>Client account number</label><input id="profile-account" placeholder="Assigned by Furry Kidz"></div>
+              <button class="btn btn-primary" type="submit">Save Changes</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-overlay" id="booking-modal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">New Booking</div><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <form id="booking-form">
+        <div class="form-row"><label>Dog</label><select id="booking-pet" required></select></div>
+        <div class="form-row"><label>Service</label><select id="booking-service" required></select></div>
+        <div class="form-row-2"><div><label>Date</label><input type="date" id="booking-date" required></div><div><label>Time</label><input type="time" id="booking-time" required></div></div>
+        <div class="form-row"><label>Notes for us</label><textarea id="booking-notes" placeholder="Gate code, special instructions, etc."></textarea></div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitBooking()">Confirm Booking</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="boarding-modal">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header"><div class="modal-title">Book Doggy Hotel (Boarding)</div><button class="close-btn" onclick="closeBoardingModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="error-banner show" style="background:var(--amber-light);color:var(--amber)">We can only accept dogs with current Viral, Rabies & Kennel Cough vaccinations, sterilised (if over 6 months), and on a tick & flea preventative program. Make sure your dog's profile under "My Dogs" has these up to date before booking.</div>
+      <form id="boarding-form">
+        <div class="form-row"><label>Dog</label><select id="boarding-pet" required></select></div>
+        <div class="form-row"><label>Location</label>
+          <select id="boarding-location" required onchange="checkBoardingAvailability()"><option value="kyalami">Kyalami</option><option value="noordwyk">Noordwyk</option></select>
+        </div>
+        <div class="form-row-2">
+          <div><label>Check-in date</label><input type="date" id="boarding-checkin" required onchange="checkBoardingAvailability()"></div>
+          <div><label>Check-out date</label><input type="date" id="boarding-checkout" required onchange="checkBoardingAvailability()"></div>
+        </div>
+        <div id="boarding-availability"></div>
+        <div class="form-row-2">
+          <div><label>Pet Taxi pickup needed?</label><select id="boarding-pickup"><option value="">No thanks</option><option value="yes">Yes please</option></select></div>
+          <div><label>Pet Taxi dropoff needed?</label><select id="boarding-dropoff"><option value="">No thanks</option><option value="yes">Yes please</option></select></div>
+        </div>
+        <div class="form-row"><label>Notes (food schedule, special requests)</label><textarea id="boarding-notes"></textarea></div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeBoardingModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitBoarding()">Confirm Boarding Request</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+let me = null, pets = [], services = [];
+
+async function init() {
+  const { customer } = await api('GET', '/api/auth/me');
+  if (customer) { me = customer; showApp(); } else { showAuth(); }
+}
+
+function showAuth() { document.getElementById('auth-screen').style.display = 'block'; document.getElementById('main-app').style.display = 'none'; }
+function showRegister() {
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('register-form').style.display = 'block';
+  document.getElementById('auth-title').textContent = 'Create your account';
+  document.getElementById('auth-sub').textContent = 'Join Furry Kidz to book services for your dogs';
+  document.getElementById('auth-switch').innerHTML = 'Already have an account? <a onclick="showLogin()">Log in</a>';
+}
+function showLogin() {
+  document.getElementById('login-form').style.display = 'block';
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('auth-title').textContent = 'Welcome back';
+  document.getElementById('auth-sub').textContent = "Log in to manage your dog's bookings";
+  document.getElementById('auth-switch').innerHTML = "Don't have an account? <a onclick=\"showRegister()\">Sign up</a>";
+}
+function authError(msg) { const el = document.getElementById('auth-error'); el.textContent = msg; el.classList.add('show'); }
+
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const { customer } = await api('POST', '/api/auth/login', { email: document.getElementById('login-email').value, password: document.getElementById('login-password').value });
+    me = customer; showApp();
+  } catch (err) { authError(err.message); }
+});
+
+document.getElementById('register-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const { customer } = await api('POST', '/api/auth/register', {
+      firstName: document.getElementById('reg-first').value, lastName: document.getElementById('reg-last').value,
+      email: document.getElementById('reg-email').value, phone: document.getElementById('reg-phone').value,
+      password: document.getElementById('reg-password').value,
+      location: document.getElementById('reg-location').value,
+      packageType: document.getElementById('reg-package').value,
+    });
+    me = customer; showApp();
+  } catch (err) { authError(err.message); }
+});
+
+async function logout() { await api('POST', '/api/auth/logout'); location.reload(); }
+
+async function showApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('main-app').style.display = 'flex';
+  document.getElementById('sidebar-name').textContent = me.fullName;
+  document.getElementById('profile-first').value = me.firstName;
+  document.getElementById('profile-last').value = me.lastName;
+  document.getElementById('profile-email').value = me.email;
+  document.getElementById('profile-phone').value = me.phone || '';
+  document.getElementById('profile-address').value = me.address || '';
+  document.getElementById('profile-emergency').value = me.emergencyNumber || '';
+  document.getElementById('profile-account').value = me.clientAccountNumber || '';
+  document.getElementById('profile-location').value = me.location || 'kyalami';
+  document.getElementById('profile-package').value = me.packageType || 'adhoc';
+  services = (await api('GET', '/api/services')).services;
+  await loadPets();
+  await loadBookings();
+  navigate('bookings');
+}
+
+function navigate(page) {
+  document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.nav-item[data-page]').forEach((n) => n.classList.toggle('active', n.dataset.page === page));
+  const titles = { bookings: ['My Bookings', 'Your upcoming and past appointments'], calendar: ['Calendar', 'All your upcoming bookings at a glance'], pets: ['My Dogs', "Manage your dogs' profiles and medical records"], profile: ['My Profile', 'Your contact details'] };
+  document.getElementById('page-title').textContent = titles[page][0];
+  document.getElementById('page-sub').textContent = titles[page][1];
+  document.getElementById('topbar-actions').innerHTML = (page === 'bookings' || page === 'calendar')
+    ? '<button class="btn btn-secondary" onclick="openBoardingModal()">🏨 Book Doggy Hotel</button><button class="btn btn-primary" onclick="openModal()">+ New Booking</button>' : '';
+  if (page === 'calendar') renderCalendar();
+}
+
+async function loadPets() {
+  pets = (await api('GET', '/api/pets')).pets;
+  const list = document.getElementById('pets-list');
+  list.innerHTML = pets.length ? '' : '<div class="empty"><div class="empty-icon">🐾</div><div>No dogs added yet</div></div>';
+  pets.forEach((p) => {
+    const vacc = treatmentStatus(p.vaccinationDate, 365);
+    const dew = treatmentStatus(p.dewormingDate, 90);
+    const tick = treatmentStatus(p.tickFleaDate, 84);
+    const div = document.createElement('div');
+    div.className = 'pet-card';
+    div.innerHTML = `
+      <div class="pet-avatar">${p.photoBase64 ? `<img src="${p.photoBase64}">` : '🐶'}</div>
+      <div style="flex:1">
+        <div class="pet-name">${p.name}</div>
+        <div class="pet-meta">${p.breed || 'Dog'}${p.age ? ' · ' + p.age : ''}</div>
+        <div class="pet-medical">
+          <span class="status status-${vacc.cls}">Vaccination: ${vacc.label}</span>
+          <span class="status status-${dew.cls}">Deworming: ${dew.label}</span>
+          <span class="status status-${tick.cls}">Tick & Flea: ${tick.label}</span>
+        </div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="deletePet('${p.id}')">Remove</button>`;
+    list.appendChild(div);
+  });
+}
+
+document.getElementById('pet-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const photoBase64 = await fileToBase64(document.getElementById('pet-photo'));
+  const vaccinationCardBase64 = await fileToBase64(document.getElementById('pet-vacc-file'));
+  await api('POST', '/api/pets', {
+    name: document.getElementById('pet-name').value,
+    breed: document.getElementById('pet-breed').value,
+    age: document.getElementById('pet-age').value,
+    notes: document.getElementById('pet-notes').value,
+    photoBase64, vaccinationCardBase64,
+    vaccinationDate: document.getElementById('pet-vacc-date').value || null,
+    dewormingDate: document.getElementById('pet-deworm-date').value || null,
+    tickFleaDate: document.getElementById('pet-tick-date').value || null,
+    weight: document.getElementById('pet-weight').value,
+    sterilised: document.getElementById('pet-sterilised').value,
+    foodType: document.getElementById('pet-food-type').value,
+    foodAmount: document.getElementById('pet-food-amount').value,
+    foodFrequency: document.getElementById('pet-food-freq').value,
+    medication: document.getElementById('pet-medication').value,
+    medicationDetails: document.getElementById('pet-med-details').value,
+  });
+  e.target.reset();
+  toast('Dog added!');
+  await loadPets();
+});
+
+async function deletePet(id) {
+  if (!confirm('Remove this dog from your profile?')) return;
+  await api('DELETE', '/api/pets/' + id);
+  await loadPets();
+}
+
+async function loadBookings() {
+  const { bookings } = await api('GET', '/api/bookings');
+  const tbody = document.getElementById('bookings-tbody');
+  tbody.innerHTML = '';
+  document.getElementById('bookings-empty').style.display = bookings.length ? 'none' : 'block';
+  bookings.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  bookings.forEach((b) => {
+    const pet = pets.find((p) => p.id === b.petId);
+    const service = services.find((s) => s.id === b.serviceId);
+    const serviceLabel = b.type === 'boarding' ? `🏨 Doggy Hotel (${b.checkInDate} → ${b.checkOutDate})` : (service ? service.name : '—');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${b.date} <span style="color:var(--text3)">${b.time || ''}</span></td>
+      <td>${serviceLabel}</td>
+      <td>${pet ? '🐶 ' + pet.name : '—'}</td>
+      <td><span class="status status-${b.status}">${b.status}</span></td>
+      <td><span class="status status-${b.invoiceStatus}">${b.invoiceStatus === 'invoiced' ? 'Invoiced' : 'Not yet'}</span></td>
+      <td>${b.status === 'pending' ? `<button class="btn btn-secondary btn-sm" onclick="cancelBooking('${b.id}')">Cancel</button>` : ''}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function cancelBooking(id) {
+  if (!confirm('Cancel this booking?')) return;
+  try { await api('DELETE', '/api/bookings/' + id); toast('Booking cancelled'); await loadBookings(); }
+  catch (err) { toast(err.message, 'error'); }
+}
+
+function openModal() {
+  if (!pets.length) { toast('Add a dog first before booking.', 'error'); navigate('pets'); return; }
+  document.getElementById('booking-pet').innerHTML = pets.map((p) => `<option value="${p.id}">${p.name}</option>`).join('');
+  const byCategory = {};
+  services.forEach((s) => { (byCategory[s.category] = byCategory[s.category] || []).push(s); });
+  document.getElementById('booking-service').innerHTML = Object.entries(byCategory).map(([cat, list]) =>
+    `<optgroup label="${cat}">${list.map((s) => `<option value="${s.id}">${s.name} — ${fmtCurrency(s.price)}</option>`).join('')}</optgroup>`
+  ).join('');
+  document.getElementById('booking-form').reset();
+  document.getElementById('booking-modal').classList.add('open');
+}
+function closeModal() { document.getElementById('booking-modal').classList.remove('open'); }
+
+async function submitBooking() {
+  const form = document.getElementById('booking-form');
+  if (!form.reportValidity()) return;
+  try {
+    await api('POST', '/api/bookings', {
+      petId: document.getElementById('booking-pet').value,
+      serviceId: document.getElementById('booking-service').value,
+      date: document.getElementById('booking-date').value,
+      time: document.getElementById('booking-time').value,
+      notes: document.getElementById('booking-notes').value,
+    });
+    closeModal(); toast('Booking confirmed!'); await loadBookings();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+document.getElementById('profile-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const { customer } = await api('PUT', '/api/profile', {
+    firstName: document.getElementById('profile-first').value, lastName: document.getElementById('profile-last').value,
+    phone: document.getElementById('profile-phone').value, address: document.getElementById('profile-address').value,
+    emergencyNumber: document.getElementById('profile-emergency').value,
+    clientAccountNumber: document.getElementById('profile-account').value,
+    location: document.getElementById('profile-location').value,
+    packageType: document.getElementById('profile-package').value,
+  });
+  me = customer;
+  document.getElementById('sidebar-name').textContent = me.fullName;
+  toast('Profile updated');
+});
+
+// ---- calendar ----
+let calMonth = new Date().getMonth(), calYear = new Date().getFullYear();
+function calShift(n) {
+  calMonth += n;
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  renderCalendar();
+}
+async function renderCalendar() {
+  const { bookings } = await api('GET', '/api/bookings');
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('cal-label').textContent = `${monthNames[calMonth]} ${calYear}`;
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const byDate = {};
+  bookings.forEach((b) => {
+    // for boarding, mark every day in the stay range
+    if (b.type === 'boarding' && b.checkInDate && b.checkOutDate) {
+      let d = new Date(b.checkInDate);
+      const end = new Date(b.checkOutDate);
+      while (d <= end) {
+        const key = d.toISOString().slice(0, 10);
+        (byDate[key] = byDate[key] || []).push(b);
+        d.setDate(d.getDate() + 1);
+      }
+    } else {
+      (byDate[b.date] = byDate[b.date] || []).push(b);
+    }
+  });
+  const body = document.getElementById('cal-body');
+  body.innerHTML = '';
+  for (let i = 0; i < firstDay; i++) body.innerHTML += '<div class="cal-cell cal-empty"></div>';
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dayBookings = byDate[key] || [];
+    const pills = dayBookings.map((b) => {
+      const pet = pets.find((p) => p.id === b.petId);
+      const label = b.type === 'boarding' ? `🏨 ${pet ? pet.name : 'Dog'}` : `${pet ? pet.name : 'Dog'}`;
+      return `<div class="cal-pill status-${b.status}">${label}</div>`;
+    }).join('');
+    body.innerHTML += `<div class="cal-cell"><div class="cal-day">${day}</div>${pills}</div>`;
+  }
+}
+
+// ---- boarding ----
+let boardingAvailable = true;
+
+async function checkBoardingAvailability() {
+  const location = document.getElementById('boarding-location').value;
+  const checkIn = document.getElementById('boarding-checkin').value;
+  const checkOut = document.getElementById('boarding-checkout').value;
+  const el = document.getElementById('boarding-availability');
+  if (!checkIn || !checkOut) { el.innerHTML = ''; boardingAvailable = true; return; }
+  if (new Date(checkOut) <= new Date(checkIn)) {
+    el.innerHTML = '<div class="error-banner show">Check-out date must be after check-in date.</div>';
+    boardingAvailable = false;
+    return;
+  }
+  try {
+    const data = await api('GET', `/api/boarding/availability?location=${location}&checkInDate=${checkIn}&checkOutDate=${checkOut}`);
+    boardingAvailable = data.available;
+    if (data.available) {
+      el.innerHTML = `<div class="error-banner show" style="background:var(--green-light);color:var(--green)">✓ Available — ${data.capacity - Math.max(...data.days.map(d=>d.booked))} spot(s) free across these dates.</div>`;
+    } else {
+      const fullDays = data.days.filter((d) => d.full).map((d) => d.date).join(', ');
+      el.innerHTML = `<div class="error-banner show">✕ Fully booked on: ${fullDays}. Please choose different dates or another location.</div>`;
+    }
+  } catch (err) { el.innerHTML = ''; }
+}
+
+function openBoardingModal() {
+  if (!pets.length) { toast('Add a dog first before booking.', 'error'); navigate('pets'); return; }
+  document.getElementById('boarding-pet').innerHTML = pets.map((p) => `<option value="${p.id}">${p.name}</option>`).join('');
+  document.getElementById('boarding-location').value = me.location || 'kyalami';
+  document.getElementById('boarding-form').reset();
+  document.getElementById('boarding-availability').innerHTML = '';
+  boardingAvailable = true;
+  document.getElementById('boarding-modal').classList.add('open');
+}
+function closeBoardingModal() { document.getElementById('boarding-modal').classList.remove('open'); }
+
+async function submitBoarding() {
+  const form = document.getElementById('boarding-form');
+  if (!form.reportValidity()) return;
+  if (!boardingAvailable) { toast('Those dates are fully booked — please choose different dates.', 'error'); return; }
+  try {
+    await api('POST', '/api/bookings', {
+      type: 'boarding',
+      petId: document.getElementById('boarding-pet').value,
+      location: document.getElementById('boarding-location').value,
+      checkInDate: document.getElementById('boarding-checkin').value,
+      checkOutDate: document.getElementById('boarding-checkout').value,
+      transportPickup: document.getElementById('boarding-pickup').value === 'yes',
+      transportDropoff: document.getElementById('boarding-dropoff').value === 'yes',
+      notes: document.getElementById('boarding-notes').value,
+    });
+    closeBoardingModal();
+    toast('Boarding request sent! A 50% deposit is required to confirm — we\'ll be in touch.');
+    await loadBookings();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+init();
+</script>
+</body>
+</html>

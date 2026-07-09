@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Furry Kidz Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="auth-screen" class="auth-wrap" style="display:none">
+  <div class="auth-card">
+    <div class="auth-title">Admin Login</div>
+    <div class="auth-sub">Staff access only</div>
+    <div class="error-banner" id="auth-error"></div>
+    <form id="admin-login-form">
+      <div class="form-row"><label>Admin Password</label><input type="password" id="admin-password" required></div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">Log In</button>
+    </form>
+  </div>
+</div>
+
+<div class="app" id="main-app" style="display:none">
+  <aside class="sidebar">
+    <div class="logo"><div class="logo-icon">🐾</div><div><div class="logo-text">Furry Kidz</div><div class="logo-sub">Admin</div></div></div>
+    <nav class="nav">
+      <div class="nav-item active" data-page="bookings" onclick="navigate('bookings')">📅 Bookings</div>
+      <div class="nav-item" data-page="calendar" onclick="navigate('calendar')">🗓 Calendar</div>
+      <div class="nav-item" data-page="clients" onclick="navigate('clients')">👥 Clients & Dogs</div>
+      <div class="nav-item" data-page="xero" onclick="navigate('xero')">⚡ Xero Setup</div>
+      <a href="staff.html" target="_blank" style="text-decoration:none"><div class="nav-item">🚐 Collections & Deliveries</div></a>
+    </nav>
+    <div class="sidebar-footer"><div class="nav-item" style="padding:8px 0" onclick="logout()">↩ Log Out</div></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div><div class="topbar-title" id="page-title">Bookings</div><div class="topbar-sub" id="page-sub">All customer bookings</div></div>
+      <div class="topbar-actions" id="topbar-actions"></div>
+    </div>
+
+    <div class="content" style="max-width:1200px">
+      <div class="page active" id="page-bookings">
+        <div class="tabs">
+          <div class="tab active" data-filter="all" onclick="filterBookings('all')">All</div>
+          <div class="tab" data-filter="pending" onclick="filterBookings('pending')">Pending</div>
+          <div class="tab" data-filter="confirmed" onclick="filterBookings('confirmed')">Confirmed</div>
+          <div class="tab" data-filter="completed" onclick="filterBookings('completed')">Completed</div>
+        </div>
+        <div class="card"><div class="card-body">
+          <table>
+            <thead><tr><th>Date</th><th>Client</th><th>Dog</th><th>Service</th><th>Price</th><th>Status</th><th>Invoice</th><th></th></tr></thead>
+            <tbody id="bookings-tbody"></tbody>
+          </table>
+          <div class="empty" id="bookings-empty" style="display:none"><div class="empty-icon">📅</div><div>No bookings in this view</div></div>
+        </div></div>
+      </div>
+
+      <div class="page" id="page-calendar">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title" id="cal-label">July 2026</div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-secondary btn-sm" onclick="calShift(-1)">←</button>
+              <button class="btn btn-secondary btn-sm" onclick="calShift(1)">→</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="cal-grid cal-head"><div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div></div>
+            <div class="cal-grid" id="cal-body"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page" id="page-clients">
+        <div class="form-row" style="max-width:340px"><input id="client-search" placeholder="Search clients by name or email…" oninput="renderClients()"></div>
+        <div class="card"><div class="card-body">
+          <table>
+            <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Dogs</th><th>Joined</th><th></th></tr></thead>
+            <tbody id="customers-tbody"></tbody>
+          </table>
+        </div></div>
+      </div>
+
+      <div class="page" id="page-xero">
+        <div class="xero-section">
+          <div class="xero-title" id="xero-status-title">Checking Xero connection…</div>
+          <div class="xero-desc" id="xero-status-desc">Connect your Xero organisation to start sending real invoices straight from bookings.</div>
+          <div id="xero-actions"></div>
+        </div>
+        <div class="card"><div class="card-header"><div class="card-title">How this works</div></div>
+          <div class="card-body" style="font-size:13px;color:var(--text2);line-height:1.7">
+            1. Click <b>Connect to Xero</b> and approve access.<br>2. Every booking gets an <b>Invoice</b> button.<br>3. It finds-or-creates the customer as a Xero contact, creates an authorised invoice, and emails it from Xero.<br>4. Reconnect only if access is revoked in Xero.
+          </div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- CLIENT / DOG RECORD MODAL -->
+<div class="modal-overlay" id="client-modal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header"><div class="modal-title" id="client-modal-title">Client</div><button class="close-btn" onclick="closeClientModal()">✕</button></div>
+    <div class="modal-body" id="client-modal-body"></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeClientModal()">Close</button></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+let allBookings = [], allClients = [], currentFilter = 'all';
+
+async function init() {
+  try { await api('GET', '/api/admin/xero/status'); showApp(); } catch { showAuth(); }
+  const params = new URLSearchParams(location.search);
+  if (params.get('xero') === 'connected') toast('Xero connected!');
+  if (params.get('xero') === 'error') toast('Xero connection failed — check your .env settings.', 'error');
+}
+
+function showAuth() { document.getElementById('auth-screen').style.display = 'block'; document.getElementById('main-app').style.display = 'none'; }
+
+document.getElementById('admin-login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try { await api('POST', '/api/admin/login', { password: document.getElementById('admin-password').value }); showApp(); }
+  catch (err) { const el = document.getElementById('auth-error'); el.textContent = err.message; el.classList.add('show'); }
+});
+
+async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); location.reload(); }
+
+async function showApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('main-app').style.display = 'flex';
+  await loadBookings();
+  await loadClients();
+  await loadXeroStatus();
+  navigate('bookings');
+}
+
+function navigate(page) {
+  document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.nav-item[data-page]').forEach((n) => n.classList.toggle('active', n.dataset.page === page));
+  const titles = { bookings: ['Bookings', 'All customer bookings'], calendar: ['Calendar', 'All bookings at a glance'], clients: ['Clients & Dogs', 'Everyone with a Furry Kidz account, and their dogs'], xero: ['Xero Setup', 'Connect your accounting'] };
+  document.getElementById('page-title').textContent = titles[page][0];
+  document.getElementById('page-sub').textContent = titles[page][1];
+  if (page === 'calendar') renderCalendar();
+}
+
+async function loadBookings() { allBookings = (await api('GET', '/api/admin/bookings')).bookings; renderBookings(); }
+
+function filterBookings(f) {
+  currentFilter = f;
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.filter === f));
+  renderBookings();
+}
+
+function renderBookings() {
+  const list = currentFilter === 'all' ? allBookings : allBookings.filter((b) => b.status === currentFilter);
+  const tbody = document.getElementById('bookings-tbody');
+  tbody.innerHTML = '';
+  document.getElementById('bookings-empty').style.display = list.length ? 'none' : 'block';
+  list.forEach((b) => {
+    const tr = document.createElement('tr');
+    const serviceLabel = b.type === 'boarding' ? `🏨 Doggy Hotel (${b.checkInDate} → ${b.checkOutDate})${b.transportPickup ? ' · Pickup' : ''}${b.transportDropoff ? ' · Dropoff' : ''}` : (b.service ? b.service.name : '—');
+    const priceLabel = b.type === 'boarding' ? '—' : (b.service ? fmtCurrency(b.service.price) : '—');
+    tr.innerHTML = `
+      <td>${b.date} <span style="color:var(--text3)">${b.time || ''}</span></td>
+      <td>${b.customer.fullName || ''}<div style="font-size:11px;color:var(--text3)">${b.customer.email || ''}</div></td>
+      <td>${b.pet ? '🐶 ' + b.pet.name : '—'}</td>
+      <td>${serviceLabel}</td>
+      <td>${priceLabel}</td>
+      <td>
+        <select onchange="updateStatus('${b.id}', this.value)" style="padding:4px 8px;font-size:12px;border-radius:6px">
+          <option value="pending" ${b.status === 'pending' ? 'selected' : ''}>Pending</option>
+          <option value="confirmed" ${b.status === 'confirmed' ? 'selected' : ''}>Confirmed</option>
+          <option value="completed" ${b.status === 'completed' ? 'selected' : ''}>Completed</option>
+        </select>
+      </td>
+      <td><span class="status status-${b.invoiceStatus}">${b.invoiceStatus === 'invoiced' ? ('#' + (b.xeroInvoiceNumber || '')) : 'Not yet'}</span></td>
+      <td>${b.invoiceStatus === 'invoiced' ? '' : `<button class="btn btn-xero btn-sm" onclick="invoiceBooking('${b.id}')">Invoice via Xero</button>`}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function updateStatus(id, status) { await api('PUT', `/api/admin/bookings/${id}/status`, { status }); toast('Status updated'); await loadBookings(); }
+
+async function invoiceBooking(id) {
+  if (!confirm('Create a Xero invoice for this booking and email it to the customer?')) return;
+  try { const r = await api('POST', `/api/admin/bookings/${id}/invoice`, { sendEmail: true }); toast(`Invoice ${r.invoiceNumber} created and emailed!`); await loadBookings(); }
+  catch (err) { toast(err.message, 'error'); }
+}
+
+async function loadClients() { allClients = (await api('GET', '/api/admin/customers')).customers; renderClients(); }
+
+function renderClients() {
+  const q = (document.getElementById('client-search')?.value || '').toLowerCase();
+  const list = allClients.filter((c) => !q || c.fullName.toLowerCase().includes(q) || c.email.toLowerCase().includes(q));
+  document.getElementById('customers-tbody').innerHTML = list.map((c) => `
+    <tr>
+      <td>${c.fullName}</td><td>${c.email}</td><td>${c.phone || '—'}</td>
+      <td>${c.pets.length} ${c.pets.length === 1 ? 'dog' : 'dogs'}</td>
+      <td>${new Date(c.createdAt).toLocaleDateString()}</td>
+      <td><button class="btn btn-secondary btn-sm" onclick="openClientModal('${c.id}')">View Record</button></td>
+    </tr>`).join('');
+}
+
+async function openClientModal(id) {
+  const { customer, pets } = await api('GET', '/api/admin/clients/' + id);
+  document.getElementById('client-modal-title').textContent = customer.fullName;
+  const body = document.getElementById('client-modal-body');
+  let html = `<div style="margin-bottom:16px;font-size:13px;color:var(--text2)">${customer.email} · ${customer.phone || 'no phone'} · Emergency: ${customer.emergencyNumber || '—'}<br>${customer.address || ''}<br>Account #${customer.clientAccountNumber || '—'} · ${customer.location || 'kyalami'} · ${customer.packageType === 'recurring' ? 'Recurring package' : 'Adhoc'}</div>`;
+  if (!pets.length) {
+    html += '<div class="empty"><div class="empty-icon">🐾</div><div>No dogs on file</div></div>';
+  } else {
+    pets.forEach((p) => {
+      const vacc = treatmentStatus(p.vaccinationDate, 365);
+      const dew = treatmentStatus(p.dewormingDate, 90);
+      const tick = treatmentStatus(p.tickFleaDate, 84);
+      const sterMap = { yes: 'Sterilised', under_6_months: 'Under 6 months', no_vet_advice: 'Not sterilised (vet advice)', no_acknowledge: 'Not sterilised (risk acknowledged)', unknown: 'Not specified' };
+      html += `
+        <div class="pet-card" style="align-items:flex-start">
+          <div class="pet-avatar">${p.photoBase64 ? `<img src="${p.photoBase64}">` : '🐶'}</div>
+          <div style="flex:1">
+            <div class="pet-name">${p.name}</div>
+            <div class="pet-meta">${p.breed || 'Dog'}${p.age ? ' · ' + p.age : ''}${p.weight ? ' · ' + p.weight + 'kg' : ''} · ${sterMap[p.sterilised] || 'Not specified'}</div>
+            ${p.notes ? `<div class="pet-meta" style="margin-top:4px">${p.notes}</div>` : ''}
+            ${p.foodType ? `<div class="pet-meta" style="margin-top:4px">Food: ${p.foodType}${p.foodAmount ? ', ' + p.foodAmount : ''}${p.foodFrequency ? ', ' + p.foodFrequency + ' daily' : ''}</div>` : ''}
+            ${p.medication === 'yes' ? `<div class="pet-meta" style="margin-top:4px;color:var(--red)">⚠ Medication: ${p.medicationDetails || 'details not specified'}</div>` : ''}
+            <div class="pet-medical">
+              <span class="status status-${vacc.cls}">Vaccination: ${vacc.label}${p.vaccinationDate ? ' (' + p.vaccinationDate + ')' : ''}</span>
+              <span class="status status-${dew.cls}">Deworming: ${dew.label}${p.dewormingDate ? ' (' + p.dewormingDate + ')' : ''}</span>
+              <span class="status status-${tick.cls}">Tick & Flea: ${tick.label}${p.tickFleaDate ? ' (' + p.tickFleaDate + ')' : ''}</span>
+            </div>
+            ${p.vaccinationCardBase64 ? `<div style="margin-top:8px"><a href="${p.vaccinationCardBase64}" target="_blank" style="font-size:12px;color:var(--accent)">View vaccination card →</a></div>` : ''}
+          </div>
+        </div>`;
+    });
+  }
+  document.getElementById('client-modal-body').innerHTML = html;
+  document.getElementById('client-modal').classList.add('open');
+}
+function closeClientModal() { document.getElementById('client-modal').classList.remove('open'); }
+
+async function loadXeroStatus() {
+  const status = await api('GET', '/api/admin/xero/status');
+  const titleEl = document.getElementById('xero-status-title');
+  const descEl = document.getElementById('xero-status-desc');
+  const actionsEl = document.getElementById('xero-actions');
+  if (!status.configured) {
+    titleEl.textContent = 'Xero is not configured yet';
+    descEl.textContent = 'Add XERO_CLIENT_ID, XERO_CLIENT_SECRET and XERO_REDIRECT_URI to the .env file on the server, then restart and refresh this page. See README.md for step-by-step setup.';
+    actionsEl.innerHTML = '';
+  } else if (status.connected) {
+    titleEl.textContent = `Connected to ${status.tenantName}`;
+    descEl.textContent = `Connected on ${new Date(status.connectedAt).toLocaleString()}. Invoices will be created in this Xero organisation.`;
+    actionsEl.innerHTML = '<button class="btn btn-secondary btn-sm" onclick="disconnectXero()">Disconnect</button>';
+  } else {
+    titleEl.textContent = 'Not connected to Xero';
+    descEl.textContent = 'Click below to log in to Xero and approve access for Furry Kidz Booking.';
+    actionsEl.innerHTML = '<button class="btn btn-xero" onclick="connectXero()">Connect to Xero</button>';
+  }
+}
+
+async function connectXero() {
+  try { const { url } = await api('GET', '/api/admin/xero/connect'); window.location.href = url; }
+  catch (err) { toast(err.message, 'error'); }
+}
+
+async function disconnectXero() {
+  if (!confirm('Disconnect this Xero organisation?')) return;
+  await api('POST', '/api/admin/xero/disconnect');
+  await loadXeroStatus();
+}
+
+// ---- calendar ----
+let calMonth = new Date().getMonth(), calYear = new Date().getFullYear();
+function calShift(n) {
+  calMonth += n;
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  renderCalendar();
+}
+function renderCalendar() {
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('cal-label').textContent = `${monthNames[calMonth]} ${calYear}`;
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const byDate = {};
+  allBookings.forEach((b) => {
+    if (b.type === 'boarding' && b.checkInDate && b.checkOutDate) {
+      let d = new Date(b.checkInDate);
+      const end = new Date(b.checkOutDate);
+      while (d <= end) { const key = d.toISOString().slice(0, 10); (byDate[key] = byDate[key] || []).push(b); d.setDate(d.getDate() + 1); }
+    } else {
+      (byDate[b.date] = byDate[b.date] || []).push(b);
+    }
+  });
+  const body = document.getElementById('cal-body');
+  body.innerHTML = '';
+  for (let i = 0; i < firstDay; i++) body.innerHTML += '<div class="cal-cell cal-empty"></div>';
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dayBookings = byDate[key] || [];
+    const pills = dayBookings.map((b) => {
+      const label = (b.type === 'boarding' ? '🏨 ' : '') + (b.customer.fullName || '').split(' ')[0] + (b.pet ? ' · ' + b.pet.name : '');
+      return `<div class="cal-pill status-${b.status}" title="${b.customer.fullName} — ${b.pet ? b.pet.name : ''}">${label}</div>`;
+    }).join('');
+    body.innerHTML += `<div class="cal-cell"><div class="cal-day">${day}</div>${pills}</div>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>

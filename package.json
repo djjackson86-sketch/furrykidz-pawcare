@@ -1,0 +1,18 @@
+{
+  "name": "furrykidz-booking",
+  "version": "1.0.0",
+  "description": "Furry Kidz Pet Services booking system with membership portal, dog medical records, and Xero invoicing integration",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "xero-node": "^9.2.0"
+  }
+}
