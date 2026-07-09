@@ -112,3 +112,111 @@ tr:last-child td { border-bottom: none; }
 .cal-pill.status-pending { background: var(--amber-light); color: var(--amber); }
 .cal-pill.status-confirmed { background: var(--blue-light); color: var(--blue); }
 .cal-pill.status-completed { background: var(--green-light); color: var(--green); }
+
+/* Mobile ergonomics: preserve the desktop look, but make every page thumb-friendly. */
+@media (max-width: 760px) {
+  body { font-size: 15px; overflow-x: hidden; }
+  .app { display: block; min-height: 100vh; }
+  .sidebar {
+    width: 100%; min-height: auto; position: sticky; top: 0; z-index: 50;
+    display: block; border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .logo { padding: 12px 14px; }
+  .logo-icon { width: 30px; height: 30px; }
+  .nav {
+    display: flex; gap: 6px; overflow-x: auto; padding: 8px 10px 10px;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav-item {
+    flex: 0 0 auto; white-space: nowrap; padding: 9px 12px;
+    background: rgba(255,255,255,0.05); border-radius: 999px; margin-bottom: 0;
+  }
+  .sidebar-footer {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 8px 12px 12px; font-size: 12px;
+  }
+  .sidebar-footer .nav-item { padding: 7px 10px !important; }
+  .main { display: block; width: 100%; }
+  .topbar {
+    min-height: 62px; height: auto; padding: 12px 14px; align-items: flex-start;
+    gap: 10px; position: sticky; top: 0; z-index: 35;
+  }
+  .app .main .topbar { top: 102px; }
+  .topbar-title { font-size: 17px; line-height: 1.2; }
+  .topbar-sub { font-size: 12px; line-height: 1.3; }
+  .topbar-actions { flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+  .content { padding: 14px 10px 88px; max-width: 100% !important; }
+  .auth-wrap { max-width: none; margin: 0; min-height: 100vh; padding: 18px 12px; display: flex; align-items: center; }
+  .auth-card { width: 100%; padding: 22px 18px; border-radius: 16px; }
+  .card { border-radius: 14px; margin-bottom: 12px; overflow: hidden; }
+  .card-header { padding: 14px 14px; align-items: flex-start; gap: 10px; }
+  .card-body { padding: 14px; }
+  .form-row-2, .form-row-3 { grid-template-columns: 1fr; gap: 10px; }
+  input, select, textarea { min-height: 44px; font-size: 16px; padding: 10px 12px; }
+  textarea { min-height: 90px; }
+  .btn { min-height: 42px; justify-content: center; padding: 10px 14px; }
+  .btn-sm { min-height: 36px; padding: 7px 11px; }
+  .tabs { width: 100%; overflow-x: auto; display: flex; scrollbar-width: none; margin-bottom: 12px; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: 0 0 auto; padding: 9px 13px; }
+  .pet-card { align-items: flex-start; padding: 12px; }
+  .pet-medical { gap: 5px; }
+  .status { white-space: normal; text-align: left; }
+
+  table.responsive-table, table.responsive-table thead, table.responsive-table tbody,
+  table.responsive-table tr, table.responsive-table th, table.responsive-table td {
+    display: block; width: 100%;
+  }
+  table.responsive-table thead { display: none; }
+  table.responsive-table tr {
+    border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
+    box-shadow: var(--shadow); padding: 8px 10px; margin-bottom: 10px;
+  }
+  table.responsive-table td {
+    border-bottom: 1px solid var(--border); padding: 9px 0; min-height: 34px;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
+    text-align: right; overflow-wrap: anywhere;
+  }
+  table.responsive-table td:last-child { border-bottom: 0; justify-content: flex-end; padding-top: 11px; }
+  table.responsive-table td::before {
+    content: attr(data-label); flex: 0 0 34%; max-width: 42%; text-align: left;
+    color: var(--text3); font-size: 11px; line-height: 1.25; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  table.responsive-table td:last-child::before { content: ''; display: none; }
+  table.responsive-table td select { width: auto; min-width: 150px; min-height: 38px; font-size: 14px; }
+  table.responsive-table td .btn { width: 100%; }
+
+  .cal-grid { gap: 3px; }
+  .cal-head { font-size: 9px; }
+  .cal-cell { min-height: 58px; padding: 4px; border-radius: 7px; }
+  .cal-day { font-size: 10px; margin-bottom: 2px; }
+  .cal-pill { font-size: 9px; padding: 2px 4px; max-width: 100%; }
+
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal { max-width: none !important; max-height: 92vh; border-radius: 18px 18px 0 0; }
+  .modal-header { padding: 16px; }
+  .modal-body { padding: 16px; }
+  .modal-footer { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); flex-direction: column-reverse; }
+  .modal-footer .btn { width: 100%; }
+  .toast-container { left: 12px; right: 12px; bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .toast { width: 100%; max-width: none; }
+
+  .collection-head { align-items: flex-start; flex-wrap: wrap; padding: 14px; }
+  .collection-head .collection-direction, .collection-head .status { margin-left: 0 !important; }
+  .collection-body { grid-template-columns: 1fr !important; padding: 14px; gap: 12px; }
+  .notes-box { min-height: 88px; font-size: 16px; }
+}
+
+@media (max-width: 420px) {
+  .topbar { flex-direction: column; align-items: stretch; }
+  .topbar-actions { margin-left: 0; justify-content: stretch; }
+  .topbar-actions .btn { flex: 1 1 auto; }
+  .app .main .topbar { top: 100px; }
+  .content { padding-left: 8px; padding-right: 8px; }
+  .card-body { padding: 12px; }
+  table.responsive-table td { display: block; text-align: left; }
+  table.responsive-table td::before { display: block; max-width: none; margin-bottom: 4px; }
+  table.responsive-table td:last-child { display: flex; }
+}

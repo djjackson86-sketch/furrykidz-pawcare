@@ -46,3 +46,36 @@ function treatmentStatus(dateStr, validDays) {
   if (days > validDays - 14) return { label: 'Due soon', cls: 'due-soon' };
   return { label: 'Up to date', cls: 'ok' };
 }
+
+// Mobile table helper: turns every data table into labelled card rows below 760px.
+// It runs after dynamic renders too, so admin/customer tables remain readable on phones.
+function enhanceResponsiveTables(root = document) {
+  root.querySelectorAll('table').forEach((table) => {
+    table.classList.add('responsive-table');
+    const headers = Array.from(table.querySelectorAll('thead th')).map((th) => th.textContent.trim());
+    table.querySelectorAll('tbody tr').forEach((tr) => {
+      Array.from(tr.children).forEach((td, i) => {
+        const label = headers[i] || (i === tr.children.length - 1 ? 'Actions' : '');
+        if (label) td.setAttribute('data-label', label);
+      });
+    });
+  });
+}
+
+function installMobileEnhancements() {
+  enhanceResponsiveTables();
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((m) => {
+      m.addedNodes.forEach((node) => {
+        if (node.nodeType === 1) enhanceResponsiveTables(node);
+      });
+    });
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', installMobileEnhancements);
+} else {
+  installMobileEnhancements();
+}
