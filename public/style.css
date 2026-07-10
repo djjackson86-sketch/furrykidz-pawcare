@@ -112,6 +112,16 @@ tr:last-child td { border-bottom: none; }
 .cal-pill.status-pending { background: var(--amber-light); color: var(--amber); }
 .cal-pill.status-confirmed { background: var(--blue-light); color: var(--blue); }
 .cal-pill.status-completed { background: var(--green-light); color: var(--green); }
+.field-hint { margin-top: 6px; font-size: 11.5px; color: var(--text3); }
+.service-checklist { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); max-height: 280px; overflow-y: auto; }
+.service-group { border-bottom: 1px solid var(--border); }
+.service-group:last-child { border-bottom: 0; }
+.service-group-title { padding: 9px 11px 5px; font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; }
+.service-option { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 9px; padding: 9px 11px; margin: 0; cursor: pointer; color: var(--text); }
+.service-option:hover { background: var(--surface2); }
+.service-option input { width: 18px; min-height: 18px; margin: 0; accent-color: var(--accent); }
+.service-option span { font-size: 13.5px; }
+.service-option strong { font-size: 12px; font-weight: 600; color: var(--text2); white-space: nowrap; }
 
 /* Mobile ergonomics: preserve the desktop look, but make every page thumb-friendly. */
 @media (max-width: 760px) {
@@ -154,6 +164,11 @@ tr:last-child td { border-bottom: none; }
   .card-body { padding: 14px; }
   .form-row-2, .form-row-3 { grid-template-columns: 1fr; gap: 10px; }
   input, select, textarea { min-height: 44px; font-size: 16px; padding: 10px 12px; }
+  .service-checklist { max-height: 42vh; }
+  .service-option { grid-template-columns: 22px 1fr; gap: 10px; padding: 12px; }
+  .service-option input { width: 20px; min-height: 20px; }
+  .service-option span, .service-option strong { font-size: 15px; }
+  .service-option strong { grid-column: 2; margin-top: -5px; }
   textarea { min-height: 90px; }
   .btn { min-height: 42px; justify-content: center; padding: 10px 14px; }
   .btn-sm { min-height: 36px; padding: 7px 11px; }

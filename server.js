@@ -303,7 +303,7 @@ app.get('/api/bookings', requireCustomer, (req, res) => {
 
 app.post('/api/bookings', requireCustomer, (req, res) => {
   const {
-    petId, serviceId, date, time, notes,
+    petId, serviceId, serviceIds, date, time, notes,
     type, checkInDate, checkOutDate, location, transportPickup, transportDropoff,
   } = req.body;
   const bookingType = type === 'boarding' ? 'boarding' : 'standard';
@@ -322,29 +322,33 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
       return res.status(409).json({ error: `${locConfig ? locConfig.name : loc} is fully booked for the doggy hotel on ${fullDays.join(', ')}. Please choose different dates or another location.` });
     }
   } else {
-    if (!petId || !serviceId || !date || !time) {
-      return res.status(400).json({ error: 'Dog, service, date and time are required.' });
+    const selectedServiceIds = Array.isArray(serviceIds) ? serviceIds : (serviceId ? [serviceId] : []);
+    if (!petId || !selectedServiceIds.length || !date) {
+      return res.status(400).json({ error: 'Dog, at least one service, and date are required.' });
     }
   }
 
   const pet = db.getPets().find((p) => p.id === petId && p.customerId === req.session.customerId);
   if (!pet) return res.status(400).json({ error: 'Invalid dog selected.' });
 
-  let service = null;
+  let selectedServices = [];
   if (bookingType === 'standard') {
-    service = db.getServices().find((s) => s.id === serviceId);
-    if (!service) return res.status(400).json({ error: 'Invalid service selected.' });
+    const requestedIds = Array.isArray(serviceIds) ? serviceIds : (serviceId ? [serviceId] : []);
+    const uniqueIds = [...new Set(requestedIds)].filter(Boolean);
+    const services = db.getServices();
+    selectedServices = uniqueIds.map((id) => services.find((s) => s.id === id));
+    if (!selectedServices.length || selectedServices.some((s) => !s)) return res.status(400).json({ error: 'Invalid service selected.' });
   }
 
   const bookings = db.getBookings();
-  const booking = {
+  const makeBooking = (selectedServiceId = null) => ({
     id: randomUUID().slice(0, 8),
     customerId: req.session.customerId,
     petId,
     type: bookingType,
-    serviceId: serviceId || null,
+    serviceId: selectedServiceId,
     date: bookingType === 'boarding' ? checkInDate : date,
-    time: time || '09:00',
+    time: bookingType === 'boarding' ? (time || '09:00') : '',
     checkInDate: bookingType === 'boarding' ? checkInDate : null,
     checkOutDate: bookingType === 'boarding' ? checkOutDate : null,
     location: location || 'kyalami',
@@ -357,10 +361,13 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
     invoiceStatus: 'not_invoiced',
     xeroInvoiceId: null,
     createdAt: new Date().toISOString(),
-  };
-  bookings.push(booking);
+  });
+  const newBookings = bookingType === 'standard'
+    ? selectedServices.map((s) => makeBooking(s.id))
+    : [makeBooking(null)];
+  bookings.push(...newBookings);
   db.saveBookings(bookings);
-  res.json({ booking });
+  res.json({ booking: newBookings[0], bookings: newBookings });
 });
 
 app.delete('/api/bookings/:id', requireCustomer, (req, res) => {

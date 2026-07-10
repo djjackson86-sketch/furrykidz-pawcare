@@ -185,8 +185,8 @@
     <div class="modal-body">
       <form id="booking-form">
         <div class="form-row"><label>Dog</label><select id="booking-pet" required></select></div>
-        <div class="form-row"><label>Service</label><select id="booking-service" required></select></div>
-        <div class="form-row-2"><div><label>Date</label><input type="date" id="booking-date" required></div><div><label>Time</label><input type="time" id="booking-time" required></div></div>
+        <div class="form-row"><label>Services</label><div id="booking-services" class="service-checklist"></div><div class="field-hint">Select one or more services for this booking request.</div></div>
+        <div class="form-row"><label>Date</label><input type="date" id="booking-date" required></div>
         <div class="form-row"><label>Notes for us</label><textarea id="booking-notes" placeholder="Gate code, special instructions, etc."></textarea></div>
       </form>
     </div>
@@ -398,9 +398,16 @@ function openModal() {
   document.getElementById('booking-pet').innerHTML = pets.map((p) => `<option value="${p.id}">${p.name}</option>`).join('');
   const byCategory = {};
   services.forEach((s) => { (byCategory[s.category] = byCategory[s.category] || []).push(s); });
-  document.getElementById('booking-service').innerHTML = Object.entries(byCategory).map(([cat, list]) =>
-    `<optgroup label="${cat}">${list.map((s) => `<option value="${s.id}">${s.name} — ${fmtCurrency(s.price)}</option>`).join('')}</optgroup>`
-  ).join('');
+  document.getElementById('booking-services').innerHTML = Object.entries(byCategory).map(([cat, list]) => `
+    <div class="service-group">
+      <div class="service-group-title">${cat}</div>
+      ${list.map((s) => `
+        <label class="service-option">
+          <input type="checkbox" name="booking-service" value="${s.id}">
+          <span>${s.name}</span>
+          <strong>${fmtCurrency(s.price)}</strong>
+        </label>`).join('')}
+    </div>`).join('');
   document.getElementById('booking-form').reset();
   document.getElementById('booking-modal').classList.add('open');
 }
@@ -409,15 +416,16 @@ function closeModal() { document.getElementById('booking-modal').classList.remov
 async function submitBooking() {
   const form = document.getElementById('booking-form');
   if (!form.reportValidity()) return;
+  const serviceIds = Array.from(document.querySelectorAll('input[name="booking-service"]:checked')).map((el) => el.value);
+  if (!serviceIds.length) { toast('Select at least one service.', 'error'); return; }
   try {
     await api('POST', '/api/bookings', {
       petId: document.getElementById('booking-pet').value,
-      serviceId: document.getElementById('booking-service').value,
+      serviceIds,
       date: document.getElementById('booking-date').value,
-      time: document.getElementById('booking-time').value,
       notes: document.getElementById('booking-notes').value,
     });
-    closeModal(); toast('Booking confirmed!'); await loadBookings();
+    closeModal(); toast(serviceIds.length === 1 ? 'Booking confirmed!' : `${serviceIds.length} bookings requested!`); await loadBookings();
   } catch (err) { toast(err.message, 'error'); }
 }
 
