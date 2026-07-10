@@ -185,7 +185,7 @@
     <div class="modal-body">
       <form id="booking-form">
         <div class="form-row"><label>Dog</label><select id="booking-pet" required></select></div>
-        <div class="form-row"><label>Services</label><div id="booking-services" class="service-checklist"></div><div class="field-hint">Select one or more services for this booking request.</div></div>
+        <div class="form-row"><label>Services</label><div id="booking-services" class="service-checklist"></div><div class="field-hint">Select up to 4 services for this booking request.</div></div>
         <div class="form-row"><label>Date</label><input type="date" id="booking-date" required></div>
         <div class="form-row"><label>Notes for us</label><textarea id="booking-notes" placeholder="Gate code, special instructions, etc."></textarea></div>
       </form>
@@ -408,16 +408,28 @@ function openModal() {
           <strong>${fmtCurrency(s.price)}</strong>
         </label>`).join('')}
     </div>`).join('');
+  document.querySelectorAll('input[name="booking-service"]').forEach((checkbox) => {
+    checkbox.addEventListener('change', enforceServiceSelectionLimit);
+  });
   document.getElementById('booking-form').reset();
   document.getElementById('booking-modal').classList.add('open');
 }
 function closeModal() { document.getElementById('booking-modal').classList.remove('open'); }
+
+function enforceServiceSelectionLimit(e) {
+  const selected = document.querySelectorAll('input[name="booking-service"]:checked');
+  if (selected.length > 4) {
+    e.target.checked = false;
+    toast('You can select up to 4 services per booking request.', 'error');
+  }
+}
 
 async function submitBooking() {
   const form = document.getElementById('booking-form');
   if (!form.reportValidity()) return;
   const serviceIds = Array.from(document.querySelectorAll('input[name="booking-service"]:checked')).map((el) => el.value);
   if (!serviceIds.length) { toast('Select at least one service.', 'error'); return; }
+  if (serviceIds.length > 4) { toast('Select no more than 4 services.', 'error'); return; }
   try {
     await api('POST', '/api/bookings', {
       petId: document.getElementById('booking-pet').value,

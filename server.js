@@ -326,6 +326,9 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
     if (!petId || !selectedServiceIds.length || !date) {
       return res.status(400).json({ error: 'Dog, at least one service, and date are required.' });
     }
+    if ([...new Set(selectedServiceIds.filter(Boolean))].length > 4) {
+      return res.status(400).json({ error: 'You can select up to 4 services per booking request.' });
+    }
   }
 
   const pet = db.getPets().find((p) => p.id === petId && p.customerId === req.session.customerId);
