@@ -130,7 +130,7 @@ async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); l
 
 async function showApp() {
   document.getElementById('auth-screen').style.display = 'none';
-  document.getElementById('main-app').style.display = 'flex';
+  document.getElementById('main-app').style.display = '';
   await loadBookings();
   await loadClients();
   await loadXeroStatus();

@@ -278,7 +278,7 @@ async function logout() { await api('POST', '/api/auth/logout'); location.reload
 
 async function showApp() {
   document.getElementById('auth-screen').style.display = 'none';
-  document.getElementById('main-app').style.display = 'flex';
+  document.getElementById('main-app').style.display = '';
   document.getElementById('sidebar-name').textContent = me.fullName;
   document.getElementById('profile-first').value = me.firstName;
   document.getElementById('profile-last').value = me.lastName;
