@@ -2,31 +2,103 @@
 const { XeroClient } = require('xero-node');
 const db = require('./db');
 
-const xero = new XeroClient({
-  clientId: process.env.XERO_CLIENT_ID,
-  clientSecret: process.env.XERO_CLIENT_SECRET,
-  redirectUris: [process.env.XERO_REDIRECT_URI],
-  scopes: 'openid profile email accounting.transactions accounting.contacts offline_access'.split(' '),
-});
+const SCOPES = 'openid profile email accounting.transactions accounting.contacts offline_access'.split(' ');
 
-let tenantId = null;
-
-function isConfigured() {
-  return !!(process.env.XERO_CLIENT_ID && process.env.XERO_CLIENT_SECRET && process.env.XERO_REDIRECT_URI);
+function envConfig() {
+  return {
+    clientId: process.env.XERO_CLIENT_ID || '',
+    clientSecret: process.env.XERO_CLIENT_SECRET || '',
+    redirectUri: process.env.XERO_REDIRECT_URI || '',
+  };
 }
 
-async function getConsentUrl() {
-  return xero.buildConsentUrl();
+function storedConfig() {
+  const saved = db.getXeroConfig() || {};
+  return {
+    clientId: saved.clientId || '',
+    clientSecret: saved.clientSecret || '',
+    redirectUri: saved.redirectUri || '',
+  };
 }
 
-async function handleCallback(callbackUrl) {
-  const tokenSet = await xero.apiCallback(callbackUrl);
-  await xero.updateTenants();
-  const tenant = xero.tenants[0];
-  tenantId = tenant.tenantId;
+function getConfig() {
+  const env = envConfig();
+  const stored = storedConfig();
+  return {
+    clientId: env.clientId || stored.clientId,
+    clientSecret: env.clientSecret || stored.clientSecret,
+    redirectUri: env.redirectUri || stored.redirectUri,
+    source: env.clientId && env.clientSecret ? 'environment' : (stored.clientId && stored.clientSecret ? 'admin' : 'missing'),
+  };
+}
+
+function withRedirect(redirectUri) {
+  const config = getConfig();
+  if (redirectUri) config.redirectUri = redirectUri;
+  return config;
+}
+
+function isConfigured(redirectUri) {
+  const config = withRedirect(redirectUri);
+  return !!(config.clientId && config.clientSecret && config.redirectUri);
+}
+
+function createClient(config = getConfig()) {
+  return new XeroClient({
+    clientId: config.clientId,
+    clientSecret: config.clientSecret,
+    redirectUris: [config.redirectUri],
+    scopes: SCOPES,
+  });
+}
+
+function publicConfig(redirectUri) {
+  const config = withRedirect(redirectUri);
+  return {
+    configured: isConfigured(redirectUri),
+    source: config.source,
+    redirectUri: config.redirectUri || redirectUri || null,
+    clientIdLast4: config.clientId ? config.clientId.slice(-4) : null,
+    hasClientSecret: !!config.clientSecret,
+    envLocked: !!(process.env.XERO_CLIENT_ID || process.env.XERO_CLIENT_SECRET || process.env.XERO_REDIRECT_URI),
+  };
+}
+
+function saveConfig({ clientId, clientSecret, redirectUri }) {
+  const current = storedConfig();
+  const next = {
+    clientId: (clientId || current.clientId || '').trim(),
+    clientSecret: (clientSecret || current.clientSecret || '').trim(),
+    redirectUri: (redirectUri || current.redirectUri || '').trim(),
+    updatedAt: new Date().toISOString(),
+  };
+  if (!next.clientId || !next.clientSecret || !next.redirectUri) {
+    throw new Error('Xero Client ID, Client Secret, and Redirect URI are required.');
+  }
+  db.saveXeroConfig(next);
+  // Existing OAuth tokens belong to the previous app config, so clear them when config changes.
+  db.saveXeroTokens(null);
+  return publicConfig(next.redirectUri);
+}
+
+async function getConsentUrl(redirectUri) {
+  const config = withRedirect(redirectUri);
+  if (!isConfigured(config.redirectUri)) {
+    throw new Error('Xero is not configured yet. Save your Xero Client ID, Client Secret, and Redirect URI first.');
+  }
+  return createClient(config).buildConsentUrl();
+}
+
+async function handleCallback(callbackUrl, redirectUri) {
+  const config = withRedirect(redirectUri);
+  if (!isConfigured(config.redirectUri)) throw new Error('Xero is not configured yet.');
+  const client = createClient(config);
+  const tokenSet = await client.apiCallback(callbackUrl);
+  await client.updateTenants();
+  const tenant = client.tenants[0];
   db.saveXeroTokens({
     tokenSet,
-    tenantId,
+    tenantId: tenant.tenantId,
     tenantName: tenant.tenantName,
     connectedAt: new Date().toISOString(),
   });
@@ -35,22 +107,25 @@ async function handleCallback(callbackUrl) {
 
 async function ensureConnected() {
   const saved = db.getXeroTokens();
-  if (!saved) return false;
-  xero.setTokenSet(saved.tokenSet);
-  tenantId = saved.tenantId;
+  if (!saved) return { connected: false };
+  const config = getConfig();
+  if (!isConfigured(config.redirectUri)) return { connected: false };
+  const client = createClient(config);
+  client.setTokenSet(saved.tokenSet);
+  let tokenSet = saved.tokenSet;
 
-  const expiresAt = saved.tokenSet.expires_at ? saved.tokenSet.expires_at * 1000 : 0;
+  const expiresAt = tokenSet.expires_at ? tokenSet.expires_at * 1000 : 0;
   if (Date.now() > expiresAt - 60_000) {
-    const newTokenSet = await xero.refreshToken();
-    db.saveXeroTokens({ ...saved, tokenSet: newTokenSet });
+    tokenSet = await client.refreshToken();
+    db.saveXeroTokens({ ...saved, tokenSet });
   }
-  return true;
+  return { connected: true, client, tenantId: saved.tenantId, saved };
 }
 
-function getStatus() {
+function getStatus(redirectUri) {
   const saved = db.getXeroTokens();
   return {
-    configured: isConfigured(),
+    ...publicConfig(redirectUri),
     connected: !!saved,
     tenantName: saved ? saved.tenantName : null,
     connectedAt: saved ? saved.connectedAt : null,
@@ -59,24 +134,23 @@ function getStatus() {
 
 function disconnect() {
   db.saveXeroTokens(null);
-  tenantId = null;
 }
 
 async function findOrCreateContact(customer) {
-  const connected = await ensureConnected();
-  if (!connected) throw new Error('Xero is not connected yet. Go to Admin > Xero Setup and connect first.');
+  const conn = await ensureConnected();
+  if (!conn.connected) throw new Error('Xero is not connected yet. Go to Admin > Xero Setup and connect first.');
 
-  const existing = await xero.accountingApi.getContacts(
-    tenantId,
+  const existing = await conn.client.accountingApi.getContacts(
+    conn.tenantId,
     undefined, undefined, undefined, undefined, undefined, undefined,
     `EmailAddress="${customer.email}"`
   );
 
   if (existing.body.contacts && existing.body.contacts.length > 0) {
-    return existing.body.contacts[0].contactID;
+    return { contactID: existing.body.contacts[0].contactID, client: conn.client, tenantId: conn.tenantId };
   }
 
-  const created = await xero.accountingApi.createContacts(tenantId, {
+  const created = await conn.client.accountingApi.createContacts(conn.tenantId, {
     contacts: [{
       name: customer.fullName,
       firstName: customer.firstName,
@@ -85,14 +159,11 @@ async function findOrCreateContact(customer) {
       phones: customer.phone ? [{ phoneType: 'MOBILE', phoneNumber: customer.phone }] : undefined,
     }],
   });
-  return created.body.contacts[0].contactID;
+  return { contactID: created.body.contacts[0].contactID, client: conn.client, tenantId: conn.tenantId };
 }
 
 async function createInvoiceForBooking({ customer, booking, lineItems, sendEmail = true, accountCode }) {
-  const connected = await ensureConnected();
-  if (!connected) throw new Error('Xero is not connected yet. Go to Admin > Xero Setup and connect first.');
-
-  const contactID = await findOrCreateContact(customer);
+  const { contactID, client, tenantId } = await findOrCreateContact(customer);
 
   const invoicePayload = {
     invoices: [{
@@ -112,11 +183,11 @@ async function createInvoiceForBooking({ customer, booking, lineItems, sendEmail
     }],
   };
 
-  const result = await xero.accountingApi.createInvoices(tenantId, invoicePayload);
+  const result = await client.accountingApi.createInvoices(tenantId, invoicePayload);
   const invoice = result.body.invoices[0];
 
   if (sendEmail) {
-    await xero.accountingApi.emailInvoice(tenantId, invoice.invoiceID, {});
+    await client.accountingApi.emailInvoice(tenantId, invoice.invoiceID, {});
   }
 
   return invoice;
@@ -128,6 +199,7 @@ module.exports = {
   handleCallback,
   ensureConnected,
   getStatus,
+  saveConfig,
   disconnect,
   createInvoiceForBooking,
 };

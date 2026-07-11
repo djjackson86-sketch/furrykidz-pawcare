@@ -8,6 +8,7 @@ const db = require('./db');
 const xero = require('./xero');
 
 const app = express();
+app.set('trust proxy', true);
 app.use(express.json({ limit: '15mb' })); // higher limit so dog photos / vaccination card images can be uploaded as base64
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
@@ -444,19 +445,38 @@ app.get('/api/admin/clients/:id', requireAdmin, (req, res) => {
 
 // ---- Xero connection ----
 
-app.get('/api/admin/xero/status', requireAdmin, (req, res) => { res.json(xero.getStatus()); });
+function publicBaseUrl(req) {
+  const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
+  return `${proto.split(',')[0]}://${req.get('host')}`;
+}
+
+function xeroRedirectUri(req) {
+  return `${publicBaseUrl(req)}/xero/callback`;
+}
+
+app.get('/api/admin/xero/status', requireAdmin, (req, res) => { res.json(xero.getStatus(xeroRedirectUri(req))); });
+
+app.post('/api/admin/xero/config', requireAdmin, (req, res) => {
+  try {
+    const redirectUri = req.body.redirectUri || xeroRedirectUri(req);
+    res.json(xero.saveConfig({ ...req.body, redirectUri }));
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Failed to save Xero config.' });
+  }
+});
 
 app.get('/api/admin/xero/connect', requireAdmin, async (req, res) => {
-  if (!xero.isConfigured()) {
-    return res.status(400).json({ error: 'Xero is not configured yet. Add XERO_CLIENT_ID, XERO_CLIENT_SECRET and XERO_REDIRECT_URI to your .env file first — see README.' });
+  const redirectUri = xeroRedirectUri(req);
+  if (!xero.isConfigured(redirectUri)) {
+    return res.status(400).json({ error: 'Xero is not configured yet. Save your Xero Client ID and Client Secret first, then make sure your Xero app redirect URI is ' + redirectUri });
   }
-  const url = await xero.getConsentUrl();
+  const url = await xero.getConsentUrl(redirectUri);
   res.json({ url });
 });
 
 app.get('/xero/callback', async (req, res) => {
   try {
-    await xero.handleCallback(req.protocol + '://' + req.get('host') + req.originalUrl);
+    await xero.handleCallback(publicBaseUrl(req) + req.originalUrl, xeroRedirectUri(req));
     res.redirect('/admin.html?xero=connected');
   } catch (err) {
     console.error(err);

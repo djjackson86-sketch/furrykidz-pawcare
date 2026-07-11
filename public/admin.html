@@ -89,6 +89,16 @@
           <div class="xero-desc" id="xero-status-desc">Connect your Xero organisation to start sending real invoices straight from bookings.</div>
           <div id="xero-actions"></div>
         </div>
+        <div class="card" id="xero-config-card"><div class="card-header"><div class="card-title">Xero app credentials</div></div>
+          <div class="card-body">
+            <div class="error-banner" id="xero-config-error"></div>
+            <div class="form-row"><label>Client ID</label><input id="xero-client-id" placeholder="Paste the Xero app Client ID"></div>
+            <div class="form-row"><label>Client Secret</label><input id="xero-client-secret" type="password" placeholder="Paste the Xero app Client Secret"></div>
+            <div class="form-row"><label>Redirect URI to add in Xero</label><input id="xero-redirect-uri" readonly></div>
+            <button class="btn btn-primary" onclick="saveXeroConfig()">Save Xero Settings</button>
+            <div class="field-hint" style="margin-top:10px">In Xero Developer, create/open your app and add the exact Redirect URI shown above. Then paste the Client ID and Client Secret here.</div>
+          </div>
+        </div>
         <div class="card"><div class="card-header"><div class="card-title">How this works</div></div>
           <div class="card-body" style="font-size:13px;color:var(--text2);line-height:1.7">
             1. Click <b>Connect to Xero</b> and approve access.<br>2. Every booking gets an <b>Invoice</b> button.<br>3. It finds-or-creates the customer as a Xero contact, creates an authorised invoice, and emails it from Xero.<br>4. Reconnect only if access is revoked in Xero.
@@ -247,18 +257,43 @@ async function loadXeroStatus() {
   const titleEl = document.getElementById('xero-status-title');
   const descEl = document.getElementById('xero-status-desc');
   const actionsEl = document.getElementById('xero-actions');
+  const redirectInput = document.getElementById('xero-redirect-uri');
+  redirectInput.value = status.redirectUri || `${location.origin}/xero/callback`;
+  document.getElementById('xero-client-id').placeholder = status.clientIdLast4 ? `Saved client ID ending ${status.clientIdLast4}` : 'Paste the Xero app Client ID';
+  document.getElementById('xero-client-secret').placeholder = status.hasClientSecret ? 'Saved — paste a new secret only if replacing it' : 'Paste the Xero app Client Secret';
+
   if (!status.configured) {
-    titleEl.textContent = 'Xero is not configured yet';
-    descEl.textContent = 'Add XERO_CLIENT_ID, XERO_CLIENT_SECRET and XERO_REDIRECT_URI to the .env file on the server, then restart and refresh this page. See README.md for step-by-step setup.';
+    titleEl.textContent = 'Xero app settings needed';
+    descEl.textContent = 'Paste the Xero Client ID and Client Secret below. In Xero Developer, add the Redirect URI shown below exactly, then save and connect.';
     actionsEl.innerHTML = '';
   } else if (status.connected) {
     titleEl.textContent = `Connected to ${status.tenantName}`;
     descEl.textContent = `Connected on ${new Date(status.connectedAt).toLocaleString()}. Invoices will be created in this Xero organisation.`;
     actionsEl.innerHTML = '<button class="btn btn-secondary btn-sm" onclick="disconnectXero()">Disconnect</button>';
   } else {
-    titleEl.textContent = 'Not connected to Xero';
-    descEl.textContent = 'Click below to log in to Xero and approve access for Furry Kidz Booking.';
+    titleEl.textContent = 'Xero settings saved — ready to connect';
+    descEl.textContent = 'Click Connect to Xero and approve access. If Xero says redirect URI mismatch, copy the Redirect URI below into the Xero app settings.';
     actionsEl.innerHTML = '<button class="btn btn-xero" onclick="connectXero()">Connect to Xero</button>';
+  }
+}
+
+async function saveXeroConfig() {
+  const errorEl = document.getElementById('xero-config-error');
+  errorEl.classList.remove('show');
+  errorEl.textContent = '';
+  try {
+    await api('POST', '/api/admin/xero/config', {
+      clientId: document.getElementById('xero-client-id').value,
+      clientSecret: document.getElementById('xero-client-secret').value,
+      redirectUri: document.getElementById('xero-redirect-uri').value,
+    });
+    document.getElementById('xero-client-id').value = '';
+    document.getElementById('xero-client-secret').value = '';
+    toast('Xero settings saved');
+    await loadXeroStatus();
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.add('show');
   }
 }
 

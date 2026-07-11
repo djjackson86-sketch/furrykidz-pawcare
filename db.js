@@ -13,6 +13,7 @@ const FILES = {
   services: path.join(DATA_DIR, 'services.json'),
   locations: path.join(DATA_DIR, 'locations.json'),
   xeroTokens: path.join(DATA_DIR, 'xero_tokens.json'),
+  xeroConfig: path.join(DATA_DIR, 'xero_config.json'),
 };
 
 const DEFAULT_SERVICES = [
@@ -65,6 +66,7 @@ const cache = {
   services: DEFAULT_SERVICES,
   locations: DEFAULT_LOCATIONS,
   xeroTokens: null,
+  xeroConfig: null,
 };
 
 function loadFile(file, fallback) {
@@ -87,12 +89,14 @@ function loadJsonFallback() {
   cache.services = loadFile(FILES.services, DEFAULT_SERVICES);
   cache.locations = loadFile(FILES.locations, DEFAULT_LOCATIONS);
   cache.xeroTokens = loadFile(FILES.xeroTokens, null);
+  cache.xeroConfig = loadFile(FILES.xeroConfig, null);
   if (!fs.existsSync(FILES.services)) saveFile(FILES.services, cache.services);
   if (!fs.existsSync(FILES.locations)) saveFile(FILES.locations, cache.locations);
   if (!fs.existsSync(FILES.customers)) saveFile(FILES.customers, cache.customers);
   if (!fs.existsSync(FILES.pets)) saveFile(FILES.pets, cache.pets);
   if (!fs.existsSync(FILES.bookings)) saveFile(FILES.bookings, cache.bookings);
   if (!fs.existsSync(FILES.xeroTokens)) saveFile(FILES.xeroTokens, cache.xeroTokens);
+  if (!fs.existsSync(FILES.xeroConfig)) saveFile(FILES.xeroConfig, cache.xeroConfig);
 }
 
 async function tursoSet(key, value) {
@@ -163,4 +167,6 @@ module.exports = {
   saveLocations: (d) => persist('locations', d),
   getXeroTokens: () => clone(cache.xeroTokens),
   saveXeroTokens: (d) => persist('xeroTokens', d),
+  getXeroConfig: () => clone(cache.xeroConfig),
+  saveXeroConfig: (d) => persist('xeroConfig', d),
 };
