@@ -10,7 +10,13 @@ const xero = require('./xero');
 const app = express();
 app.set('trust proxy', true);
 app.use(express.json({ limit: '15mb' })); // higher limit so dog photos / vaccination card images can be uploaded as base64
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html') || filePath.endsWith('app.js')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    }
+  },
+}));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'change-this-secret-in-production',
   resave: false,
