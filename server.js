@@ -248,6 +248,24 @@ app.get('/api/staff/collections', requireStaff, (req, res) => {
   res.json({ items });
 });
 
+// Staff calendar: all bookings, enriched enough to show customer, dog, and service names.
+app.get('/api/staff/bookings', requireStaff, (req, res) => {
+  const bookings = db.getBookings();
+  const customers = db.getCustomers();
+  const pets = db.getPets();
+  const services = db.getServices();
+  const enriched = bookings
+    .filter((b) => b.status !== 'cancelled')
+    .map((b) => ({
+      ...b,
+      customer: publicCustomer(customers.find((c) => c.id === b.customerId) || {}),
+      pet: pets.find((p) => p.id === b.petId) || null,
+      service: services.find((s) => s.id === b.serviceId) || null,
+    }))
+    .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+  res.json({ bookings: enriched });
+});
+
 function makeCollectionItem(booking, customer, pet, direction, date, reason) {
   return {
     bookingId: booking.id,

@@ -22,6 +22,9 @@
 .day-group-label { font-size: 12px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin: 22px 0 10px; }
 .day-group-label:first-child { margin-top: 0; }
 .pet-thumb { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.staff-tabs { display:flex; gap:6px; margin-bottom:16px; }
+.staff-tab { border:0; background:var(--surface2); color:var(--text2); border-radius:999px; padding:8px 14px; font:inherit; font-size:13px; cursor:pointer; }
+.staff-tab.active { background:var(--accent); color:#fff; }
 @media (max-width: 700px) { .collection-body { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -46,23 +49,47 @@
       <div class="topbar-sub">Every pickup and dropoff, in order</div>
     </div>
     <div class="topbar-actions">
-      <button class="btn btn-secondary btn-sm" onclick="loadCollections()">↻ Refresh</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadStaffData()">↻ Refresh</button>
       <button class="btn btn-secondary btn-sm" onclick="logout()">↩ Log Out</button>
     </div>
   </div>
   <div class="content" style="max-width:780px">
-    <div id="collections-list"></div>
-    <div class="empty" id="collections-empty" style="display:none"><div class="empty-icon">🚐</div><div>No collections or deliveries scheduled</div></div>
+    <div class="staff-tabs">
+      <button class="staff-tab active" data-view="collections" onclick="setView('collections')">🚐 Collections</button>
+      <button class="staff-tab" data-view="calendar" onclick="setView('calendar')">🗓 Calendar</button>
+    </div>
+    <div id="view-collections">
+      <div id="collections-list"></div>
+      <div class="empty" id="collections-empty" style="display:none"><div class="empty-icon">🚐</div><div>No collections or deliveries scheduled</div></div>
+    </div>
+    <div id="view-calendar" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title" id="staff-cal-label">Calendar</div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-secondary btn-sm" onclick="staffCalShift(-1)">←</button>
+            <button class="btn btn-secondary btn-sm" onclick="staffCalShift(1)">→</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="cal-grid cal-head"><div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div></div>
+          <div class="cal-grid" id="staff-cal-body"></div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
 <script src="app.js"></script>
 <script>
+let collections = [], staffBookings = [], currentView = 'collections';
+let staffCalMonth = new Date().getMonth(), staffCalYear = new Date().getFullYear();
+
 async function init() {
   try { await api('GET', '/api/staff/collections'); showApp(); } catch { showAuth(); }
 }
 function showAuth() { document.getElementById('auth-screen').style.display = 'block'; document.getElementById('main-app').style.display = 'none'; }
-function showApp() { document.getElementById('auth-screen').style.display = 'none'; document.getElementById('main-app').style.display = 'block'; loadCollections(); }
+function showApp() { document.getElementById('auth-screen').style.display = 'none'; document.getElementById('main-app').style.display = 'block'; loadStaffData(); }
 
 document.getElementById('staff-login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -84,14 +111,32 @@ function fmtDateLabel(dateStr) {
   return `${weekday}, ${full}`;
 }
 
-async function loadCollections() {
-  const { items } = await api('GET', '/api/staff/collections');
+async function loadStaffData() {
+  const [{ items }, { bookings }] = await Promise.all([
+    api('GET', '/api/staff/collections'),
+    api('GET', '/api/staff/bookings'),
+  ]);
+  collections = items;
+  staffBookings = bookings;
+  renderCollections();
+  renderStaffCalendar();
+}
+
+function setView(view) {
+  currentView = view;
+  document.getElementById('view-collections').style.display = view === 'collections' ? 'block' : 'none';
+  document.getElementById('view-calendar').style.display = view === 'calendar' ? 'block' : 'none';
+  document.querySelectorAll('.staff-tab').forEach((tab) => tab.classList.toggle('active', tab.dataset.view === view));
+  if (view === 'calendar') renderStaffCalendar();
+}
+
+function renderCollections() {
   const list = document.getElementById('collections-list');
-  document.getElementById('collections-empty').style.display = items.length ? 'none' : 'block';
+  document.getElementById('collections-empty').style.display = collections.length ? 'none' : 'block';
   list.innerHTML = '';
 
   let lastDate = null;
-  items.forEach((it) => {
+  collections.forEach((it) => {
     if (it.date !== lastDate) {
       lastDate = it.date;
       const label = document.createElement('div');
@@ -143,6 +188,49 @@ async function saveNotes(btn, bookingId) {
     await api('PUT', `/api/staff/bookings/${bookingId}/notes`, { collectionNotes, dropoffNotes });
     toast('Notes saved');
   } catch (err) { toast(err.message, 'error'); }
+}
+
+function staffCalShift(n) {
+  staffCalMonth += n;
+  if (staffCalMonth < 0) { staffCalMonth = 11; staffCalYear--; }
+  if (staffCalMonth > 11) { staffCalMonth = 0; staffCalYear++; }
+  renderStaffCalendar();
+}
+
+function renderStaffCalendar() {
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('staff-cal-label').textContent = `${monthNames[staffCalMonth]} ${staffCalYear}`;
+  const firstDay = new Date(staffCalYear, staffCalMonth, 1).getDay();
+  const daysInMonth = new Date(staffCalYear, staffCalMonth + 1, 0).getDate();
+  const byDate = {};
+  staffBookings.forEach((b) => {
+    if (b.type === 'boarding' && b.checkInDate && b.checkOutDate) {
+      let d = new Date(b.checkInDate);
+      const end = new Date(b.checkOutDate);
+      while (d <= end) {
+        const key = d.toISOString().slice(0, 10);
+        (byDate[key] = byDate[key] || []).push(b);
+        d.setDate(d.getDate() + 1);
+      }
+    } else {
+      (byDate[b.date] = byDate[b.date] || []).push(b);
+    }
+  });
+  const body = document.getElementById('staff-cal-body');
+  body.innerHTML = '';
+  for (let i = 0; i < firstDay; i++) body.innerHTML += '<div class="cal-cell cal-empty"></div>';
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${staffCalYear}-${String(staffCalMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dayBookings = byDate[key] || [];
+    const pills = dayBookings.map((b) => {
+      const customerName = b.customer && b.customer.fullName ? b.customer.fullName : 'Client';
+      const petName = b.pet && b.pet.name ? b.pet.name : 'Dog';
+      const serviceName = b.type === 'boarding' ? 'Doggy Hotel' : (b.service ? b.service.name : 'Service');
+      const label = `${b.type === 'boarding' ? '🏨 ' : ''}${customerName.split(' ')[0]} · ${petName}`;
+      return `<div class="cal-pill status-${b.status}" title="${customerName} — ${petName} — ${serviceName}">${label}</div>`;
+    }).join('');
+    body.innerHTML += `<div class="cal-cell"><div class="cal-day">${day}</div>${pills}</div>`;
+  }
 }
 
 init();
