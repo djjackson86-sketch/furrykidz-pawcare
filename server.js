@@ -465,6 +465,11 @@ app.post('/api/admin/xero/config', requireAdmin, (req, res) => {
   }
 });
 
+app.delete('/api/admin/xero/config', requireAdmin, (req, res) => {
+  xero.clearConfig();
+  res.json({ ok: true, status: xero.getStatus(xeroRedirectUri(req)) });
+});
+
 app.get('/api/admin/xero/connect', requireAdmin, async (req, res) => {
   const redirectUri = xeroRedirectUri(req);
   if (!xero.isConfigured(redirectUri)) {

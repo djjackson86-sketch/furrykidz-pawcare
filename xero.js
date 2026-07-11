@@ -136,6 +136,11 @@ function disconnect() {
   db.saveXeroTokens(null);
 }
 
+function clearConfig() {
+  db.saveXeroTokens(null);
+  db.saveXeroConfig(null);
+}
+
 async function findOrCreateContact(customer) {
   const conn = await ensureConnected();
   if (!conn.connected) throw new Error('Xero is not connected yet. Go to Admin > Xero Setup and connect first.');
@@ -200,6 +205,7 @@ module.exports = {
   ensureConnected,
   getStatus,
   saveConfig,
+  clearConfig,
   disconnect,
   createInvoiceForBooking,
 };

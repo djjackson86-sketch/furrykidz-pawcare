@@ -96,6 +96,7 @@
             <div class="form-row"><label>Client Secret</label><input id="xero-client-secret" type="password" placeholder="Paste the Xero app Client Secret"></div>
             <div class="form-row"><label>Redirect URI to add in Xero</label><input id="xero-redirect-uri" readonly></div>
             <button class="btn btn-primary" onclick="saveXeroConfig()">Save Xero Settings</button>
+            <button class="btn btn-secondary" style="margin-left:8px" onclick="clearXeroConfig()">Clear Saved Settings</button>
             <div class="field-hint" style="margin-top:10px">In Xero Developer, create/open your app and add the exact Redirect URI shown above. Then paste the Client ID and Client Secret here.</div>
           </div>
         </div>
@@ -305,6 +306,13 @@ async function connectXero() {
 async function disconnectXero() {
   if (!confirm('Disconnect this Xero organisation?')) return;
   await api('POST', '/api/admin/xero/disconnect');
+  await loadXeroStatus();
+}
+
+async function clearXeroConfig() {
+  if (!confirm('Clear saved Xero app settings and disconnect Xero?')) return;
+  await api('DELETE', '/api/admin/xero/config');
+  toast('Xero settings cleared');
   await loadXeroStatus();
 }
 
