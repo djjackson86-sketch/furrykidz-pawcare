@@ -116,8 +116,17 @@ async function ensureConnected() {
 
   const expiresAt = tokenSet.expires_at ? tokenSet.expires_at * 1000 : 0;
   if (Date.now() > expiresAt - 60_000) {
-    tokenSet = await client.refreshToken();
+    if (!tokenSet.refresh_token) {
+      db.saveXeroTokens(null);
+      throw new Error('Xero connection expired and cannot be refreshed. Reconnect Xero from Admin > Xero Setup.');
+    }
+    // xero-node's refreshToken() depends on its OpenID client being initialized.
+    // apiCallback() initializes it during OAuth, but a fresh server process restoring
+    // saved tokens from DB does not. Use refreshWithRefreshToken so production restarts
+    // can refresh persisted tokens safely.
+    tokenSet = await client.refreshWithRefreshToken(config.clientId, config.clientSecret, tokenSet.refresh_token);
     db.saveXeroTokens({ ...saved, tokenSet });
+    client.setTokenSet(tokenSet);
   }
   return { connected: true, client, tenantId: saved.tenantId, saved };
 }
