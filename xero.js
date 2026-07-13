@@ -2,7 +2,7 @@
 const { XeroClient } = require('xero-node');
 const db = require('./db');
 
-const SCOPES = 'openid profile email accounting.transactions accounting.contacts offline_access'.split(' ');
+const SCOPES = 'openid profile email accounting.settings.read accounting.invoices accounting.invoices.read accounting.contacts accounting.contacts.read offline_access'.split(' ');
 
 function envConfig() {
   return {
@@ -167,26 +167,52 @@ async function findOrCreateContact(customer) {
   return { contactID: created.body.contacts[0].contactID, client: conn.client, tenantId: conn.tenantId };
 }
 
-async function createInvoiceForBooking({ customer, booking, lineItems, sendEmail = true, accountCode }) {
-  const { contactID, client, tenantId } = await findOrCreateContact(customer);
+function normalizeLineAmountType(value) {
+  const raw = String(value || process.env.XERO_LINE_AMOUNT_TYPES || 'Inclusive').trim().toLowerCase();
+  if (raw === 'exclusive') return 'Exclusive';
+  if (raw === 'notax' || raw === 'no_tax' || raw === 'no tax') return 'NoTax';
+  return 'Inclusive';
+}
 
-  const invoicePayload = {
+function defaultTaxType(lineAmountTypes) {
+  if (process.env.XERO_DEFAULT_TAX_TYPE) return process.env.XERO_DEFAULT_TAX_TYPE.trim();
+  if (lineAmountTypes === 'NoTax') return 'NONE';
+  return 'OUTPUT2'; // South African output VAT in Xero's standard chart; override with XERO_DEFAULT_TAX_TYPE if needed.
+}
+
+function buildInvoicePayload({ contactID, booking, lineItems, accountCode, lineAmountTypes }) {
+  const resolvedLineAmountTypes = normalizeLineAmountType(lineAmountTypes);
+  const fallbackAccountCode = accountCode || process.env.XERO_DEFAULT_ACCOUNT_CODE || '200';
+  const fallbackTaxType = defaultTaxType(resolvedLineAmountTypes);
+
+  return {
     invoices: [{
       type: 'ACCREC',
       contact: { contactID },
       date: new Date().toISOString().slice(0, 10),
       dueDate: booking.date,
-      lineAmountTypes: 'Exclusive',
+      lineAmountTypes: resolvedLineAmountTypes,
       reference: `Booking #${booking.id}`,
       status: 'AUTHORISED',
-      lineItems: lineItems.map((li) => ({
-        description: li.description,
-        quantity: li.quantity,
-        unitAmount: li.unitAmount,
-        accountCode: accountCode || process.env.XERO_DEFAULT_ACCOUNT_CODE || '200',
-      })),
+      lineItems: lineItems.map((li) => {
+        const payload = {
+          description: li.description,
+          quantity: li.quantity,
+          unitAmount: li.unitAmount,
+          accountCode: li.accountCode || fallbackAccountCode,
+          taxType: li.taxType || fallbackTaxType,
+        };
+        if (li.itemCode) payload.itemCode = li.itemCode;
+        return payload;
+      }),
     }],
   };
+}
+
+async function createInvoiceForBooking({ customer, booking, lineItems, sendEmail = true, accountCode, lineAmountTypes }) {
+  const { contactID, client, tenantId } = await findOrCreateContact(customer);
+
+  const invoicePayload = buildInvoicePayload({ contactID, booking, lineItems, accountCode, lineAmountTypes });
 
   const result = await client.accountingApi.createInvoices(tenantId, invoicePayload);
   const invoice = result.body.invoices[0];
@@ -207,5 +233,6 @@ module.exports = {
   saveConfig,
   clearConfig,
   disconnect,
+  buildInvoicePayload,
   createInvoiceForBooking,
 };

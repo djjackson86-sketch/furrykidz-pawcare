@@ -516,6 +516,9 @@ app.post('/api/admin/bookings/:id/invoice', requireAdmin, async (req, res) => {
         description: `Luxury Accommodation — ${pet ? pet.name : 'Dog'} (${booking.checkInDate} to ${booking.checkOutDate}, ${nights} night${nights > 1 ? 's' : ''})`,
         quantity: nights,
         unitAmount: perNight ? perNight.price : 327,
+        accountCode: perNight ? perNight.xeroAccountCode : undefined,
+        taxType: perNight ? perNight.xeroTaxType : undefined,
+        itemCode: perNight ? perNight.xeroItemCode : undefined,
       }];
     } else {
       const service = db.getServices().find((s) => s.id === booking.serviceId);
@@ -524,6 +527,9 @@ app.post('/api/admin/bookings/:id/invoice', requireAdmin, async (req, res) => {
         description: `${service.name} — ${pet ? pet.name : 'Dog'} (${booking.date} ${booking.time})`,
         quantity: 1,
         unitAmount: service.price,
+        accountCode: service.xeroAccountCode,
+        taxType: service.xeroTaxType,
+        itemCode: service.xeroItemCode,
       }];
     }
 
