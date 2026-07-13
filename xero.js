@@ -154,11 +154,13 @@ async function findOrCreateContact(customer) {
   const conn = await ensureConnected();
   if (!conn.connected) throw new Error('Xero is not connected yet. Go to Admin > Xero Setup and connect first.');
 
-  const existing = await conn.client.accountingApi.getContacts(
+  const email = String(customer.email || '').trim();
+  const escapedEmail = email.replace(/"/g, '\\"');
+  const existing = email ? await conn.client.accountingApi.getContacts(
     conn.tenantId,
-    undefined, undefined, undefined, undefined, undefined, undefined,
-    `EmailAddress="${customer.email}"`
-  );
+    undefined,
+    `EmailAddress=="${escapedEmail}"`
+  ) : { body: { contacts: [] } };
 
   if (existing.body.contacts && existing.body.contacts.length > 0) {
     return { contactID: existing.body.contacts[0].contactID, client: conn.client, tenantId: conn.tenantId };
