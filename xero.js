@@ -191,7 +191,12 @@ function defaultTaxType(lineAmountTypes) {
   return 'OUTPUT2'; // South African output VAT in Xero's standard chart; override with XERO_DEFAULT_TAX_TYPE if needed.
 }
 
-function buildInvoicePayload({ contactID, booking, lineItems, accountCode, lineAmountTypes }) {
+function normalizeInvoiceStatus(value) {
+  const raw = String(value || 'DRAFT').trim().toUpperCase();
+  return raw === 'AUTHORISED' ? 'AUTHORISED' : 'DRAFT';
+}
+
+function buildInvoicePayload({ contactID, booking, lineItems, accountCode, lineAmountTypes, status = 'DRAFT', reference, dueDate }) {
   const resolvedLineAmountTypes = normalizeLineAmountType(lineAmountTypes);
   const fallbackAccountCode = accountCode || process.env.XERO_DEFAULT_ACCOUNT_CODE || '200';
   const fallbackTaxType = defaultTaxType(resolvedLineAmountTypes);
@@ -201,10 +206,10 @@ function buildInvoicePayload({ contactID, booking, lineItems, accountCode, lineA
       type: 'ACCREC',
       contact: { contactID },
       date: new Date().toISOString().slice(0, 10),
-      dueDate: booking.date,
+      dueDate: dueDate || booking.date || new Date().toISOString().slice(0, 10),
       lineAmountTypes: resolvedLineAmountTypes,
-      reference: `Booking #${booking.id}`,
-      status: 'AUTHORISED',
+      reference: reference || `Booking #${booking.id}`,
+      status: normalizeInvoiceStatus(status),
       lineItems: lineItems.map((li) => {
         const payload = {
           description: li.description,
@@ -220,15 +225,15 @@ function buildInvoicePayload({ contactID, booking, lineItems, accountCode, lineA
   };
 }
 
-async function createInvoiceForBooking({ customer, booking, lineItems, sendEmail = true, accountCode, lineAmountTypes }) {
+async function createInvoiceForBooking({ customer, booking, lineItems, sendEmail = false, accountCode, lineAmountTypes, status = 'DRAFT', reference, dueDate }) {
   const { contactID, client, tenantId } = await findOrCreateContact(customer);
 
-  const invoicePayload = buildInvoicePayload({ contactID, booking, lineItems, accountCode, lineAmountTypes });
+  const invoicePayload = buildInvoicePayload({ contactID, booking, lineItems, accountCode, lineAmountTypes, status, reference, dueDate });
 
   const result = await client.accountingApi.createInvoices(tenantId, invoicePayload);
   const invoice = result.body.invoices[0];
 
-  if (sendEmail) {
+  if (sendEmail && normalizeInvoiceStatus(status) !== 'DRAFT') {
     await client.accountingApi.emailInvoice(tenantId, invoice.invoiceID, {});
   }
 

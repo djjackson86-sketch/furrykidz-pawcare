@@ -52,6 +52,124 @@ function normalizeTransportWindow(value) {
   return normalized === 'am' || normalized === 'pm' ? normalized : '';
 }
 
+function parseWeightKg(value) {
+  const match = String(value || '').replace(',', '.').match(/\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : null;
+}
+
+function serviceById(services, id) {
+  return services.find((s) => s.id === id) || null;
+}
+
+function chooseDewormingService(services, weightKg) {
+  if (weightKg !== null && weightKg <= 5) return serviceById(services, 'pc-dew-puppy');
+  if (weightKg !== null && weightKg <= 12.5) return serviceById(services, 'pc-dew-small');
+  if (weightKg !== null && weightKg <= 25) return serviceById(services, 'pc-dew-med');
+  if (weightKg !== null && weightKg > 25) return serviceById(services, 'pc-dew-large');
+  return serviceById(services, 'pc-dew-small');
+}
+
+function chooseTickFleaService(services, weightKg) {
+  if (weightKg !== null && weightKg <= 4.5) return serviceById(services, 'pc-brav-1');
+  if (weightKg !== null && weightKg <= 10) return serviceById(services, 'pc-brav-2');
+  if (weightKg !== null && weightKg <= 20) return serviceById(services, 'pc-brav-3');
+  if (weightKg !== null && weightKg <= 40) return serviceById(services, 'pc-brav-4');
+  if (weightKg !== null && weightKg > 40) return serviceById(services, 'pc-brav-5');
+  return serviceById(services, 'pc-brav-3');
+}
+
+function makeApplicationInvoiceSpecs(customer, pet, services = db.getServices()) {
+  const weightKg = parseWeightKg(pet && pet.weight);
+  const daycare = serviceById(services, customer.packageType === 'recurring' ? 'dc-extra' : 'dc-adhoc');
+  return [
+    { kind: 'assessment_day', reference: 'Assessment Day', service: serviceById(services, 'dc-assess') },
+    { kind: 'daycare', reference: 'Daycare', service: daycare },
+    { kind: 'deworming', reference: 'Deworming', service: chooseDewormingService(services, weightKg) },
+    { kind: 'tick_flea', reference: 'Tick & Flea', service: chooseTickFleaService(services, weightKg) },
+  ];
+}
+
+async function maybeCreateApplicationDraftInvoices(customerId, pet) {
+  const customers = db.getCustomers();
+  const idx = customers.findIndex((c) => c.id === customerId);
+  if (idx === -1) return null;
+  const customer = customers[idx];
+  if (customer.applicationInvoicesCreatedAt || customer.applicationInvoiceStatus === 'drafts_created') {
+    return { skipped: true, invoices: customer.applicationInvoices || [] };
+  }
+  const batchId = customer.applicationInvoiceBatchId || randomUUID().slice(0, 8);
+  const existingDrafts = Array.isArray(customer.applicationInvoices) ? customer.applicationInvoices : [];
+  const existingKinds = new Set(existingDrafts.map((inv) => inv.kind));
+  const specs = makeApplicationInvoiceSpecs(customer, pet);
+  const created = [...existingDrafts];
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    for (const spec of specs) {
+      if (existingKinds.has(spec.kind)) continue;
+      if (!spec.service) throw new Error(`Missing service mapping for ${spec.reference}.`);
+      const invoice = await xero.createInvoiceForBooking({
+        customer,
+        booking: { id: `application-${batchId}-${spec.kind}`, date: today },
+        lineItems: [{
+          description: `${spec.service.name} — ${pet ? pet.name : 'Application'}${pet && pet.weight ? ` (${pet.weight}kg)` : ''}`,
+          quantity: 1,
+          unitAmount: spec.service.price,
+          accountCode: spec.service.xeroAccountCode,
+          taxType: spec.service.xeroTaxType,
+          itemCode: spec.service.xeroItemCode,
+        }],
+        status: 'DRAFT',
+        sendEmail: false,
+        reference: spec.reference,
+        dueDate: today,
+      });
+      created.push({
+        kind: spec.kind,
+        reference: spec.reference,
+        serviceId: spec.service.id,
+        serviceName: spec.service.name,
+        amount: spec.service.price,
+        xeroInvoiceId: invoice.invoiceID,
+        xeroInvoiceNumber: invoice.invoiceNumber || null,
+        xeroStatus: invoice.status || 'DRAFT',
+        createdAt: new Date().toISOString(),
+      });
+      existingKinds.add(spec.kind);
+      customers[idx] = {
+        ...customers[idx],
+        applicationInvoiceBatchId: batchId,
+        applicationInvoiceStatus: 'partial',
+        applicationInvoices: created,
+        applicationInvoiceError: null,
+      };
+      db.saveCustomers(customers);
+    }
+    customers[idx] = {
+      ...customers[idx],
+      applicationInvoiceBatchId: batchId,
+      applicationInvoiceStatus: 'drafts_created',
+      applicationInvoices: created,
+      applicationInvoicesCreatedAt: new Date().toISOString(),
+      applicationInvoiceError: null,
+    };
+    db.saveCustomers(customers);
+    return { skipped: false, invoices: created };
+  } catch (err) {
+    customers[idx] = {
+      ...customers[idx],
+      applicationInvoiceBatchId: batchId,
+      applicationInvoiceStatus: 'error',
+      applicationInvoices: created,
+      applicationInvoiceError: err.message || 'Failed to create application draft invoices.',
+      applicationInvoiceErrorAt: new Date().toISOString(),
+    };
+    db.saveCustomers(customers);
+    console.error('Application draft invoices failed:', err);
+    return { skipped: false, error: customers[idx].applicationInvoiceError, invoices: created };
+  }
+}
+
 // Returns an array of YYYY-MM-DD strings for every night of a boarding stay (check-in inclusive, check-out exclusive — the dog isn't there the night they leave).
 function nightsBetween(checkIn, checkOut) {
   const nights = [];
@@ -172,7 +290,7 @@ app.get('/api/pets', requireCustomer, (req, res) => {
   res.json({ pets: db.getPets().filter((p) => p.customerId === req.session.customerId) });
 });
 
-app.post('/api/pets', requireCustomer, (req, res) => {
+app.post('/api/pets', requireCustomer, async (req, res) => {
   const {
     name, breed, age, notes, photoBase64, vaccinationCardBase64, vaccinationDate, dewormingDate, tickFleaDate,
     weight, sterilised, foodType, foodAmount, foodFrequency, medication, medicationDetails,
@@ -202,7 +320,8 @@ app.post('/api/pets', requireCustomer, (req, res) => {
   };
   pets.push(pet);
   db.savePets(pets);
-  res.json({ pet });
+  const applicationInvoices = await maybeCreateApplicationDraftInvoices(req.session.customerId, pet);
+  res.json({ pet, applicationInvoices });
 });
 
 app.put('/api/pets/:id', requireCustomer, (req, res) => {
@@ -550,15 +669,22 @@ app.post('/api/admin/bookings/:id/invoice', requireAdmin, async (req, res) => {
       }];
     }
 
-    const sendEmail = req.body.sendEmail !== false;
-    const invoice = await xero.createInvoiceForBooking({ customer, booking, lineItems, sendEmail });
+    const invoice = await xero.createInvoiceForBooking({
+      customer,
+      booking,
+      lineItems,
+      sendEmail: false,
+      status: 'DRAFT',
+    });
 
-    bookings[idx].invoiceStatus = 'invoiced';
+    bookings[idx].invoiceStatus = 'draft';
+    bookings[idx].xeroInvoiceStatus = invoice.status || 'DRAFT';
     bookings[idx].xeroInvoiceId = invoice.invoiceID;
     bookings[idx].xeroInvoiceNumber = invoice.invoiceNumber;
+    bookings[idx].xeroDraftCreatedAt = new Date().toISOString();
     db.saveBookings(bookings);
 
-    res.json({ ok: true, invoiceNumber: invoice.invoiceNumber, invoiceId: invoice.invoiceID, emailed: sendEmail });
+    res.json({ ok: true, invoiceNumber: invoice.invoiceNumber, invoiceId: invoice.invoiceID, status: invoice.status || 'DRAFT', emailed: false });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || 'Failed to create Xero invoice.' });

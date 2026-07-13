@@ -102,7 +102,7 @@
         </div>
         <div class="card"><div class="card-header"><div class="card-title">How this works</div></div>
           <div class="card-body" style="font-size:13px;color:var(--text2);line-height:1.7">
-            1. Click <b>Connect to Xero</b> and approve access.<br>2. Every booking gets an <b>Invoice</b> button.<br>3. It finds-or-creates the customer as a Xero contact, creates an authorised invoice, and emails it from Xero.<br>4. Reconnect only if access is revoked in Xero.
+            1. Click <b>Connect to Xero</b> and approve access.<br>2. Every booking gets a <b>Create Xero Draft</b> button.<br>3. It finds-or-creates the customer as a Xero contact and creates a draft invoice for review in Xero.<br>4. When a client completes their first dog application, four Xero draft invoices are created: Assessment Day, Daycare, Deworming, and Tick & Flea.
           </div></div>
       </div>
     </div>
@@ -166,6 +166,17 @@ function filterBookings(f) {
   renderBookings();
 }
 
+function invoiceLabel(b) {
+  if (b.invoiceStatus === 'draft') return `Draft #${b.xeroInvoiceNumber || ''}`;
+  if (b.invoiceStatus === 'invoiced') return `#${b.xeroInvoiceNumber || ''}`;
+  if (b.invoiceStatus === 'voided') return `Voided #${b.xeroInvoiceNumber || b.xeroVoidedInvoiceNumber || ''}`;
+  return 'Not yet';
+}
+
+function canCreateInvoiceDraft(b) {
+  return !b.invoiceStatus || b.invoiceStatus === 'not_invoiced' || b.invoiceStatus === 'voided';
+}
+
 function renderBookings() {
   const list = currentFilter === 'all' ? allBookings : allBookings.filter((b) => b.status === currentFilter);
   const tbody = document.getElementById('bookings-tbody');
@@ -188,8 +199,8 @@ function renderBookings() {
           <option value="completed" ${b.status === 'completed' ? 'selected' : ''}>Completed</option>
         </select>
       </td>
-      <td><span class="status status-${b.invoiceStatus}">${b.invoiceStatus === 'invoiced' ? ('#' + (b.xeroInvoiceNumber || '')) : 'Not yet'}</span></td>
-      <td>${b.invoiceStatus === 'invoiced' ? '' : `<button class="btn btn-xero btn-sm" onclick="invoiceBooking('${b.id}')">Invoice via Xero</button>`}</td>`;
+      <td><span class="status status-${b.invoiceStatus || 'not_invoiced'}">${invoiceLabel(b)}</span></td>
+      <td>${canCreateInvoiceDraft(b) ? `<button class="btn btn-xero btn-sm" onclick="invoiceBooking('${b.id}')">Create Xero Draft</button>` : ''}</td>`;
     tbody.appendChild(tr);
   });
 }
@@ -197,8 +208,8 @@ function renderBookings() {
 async function updateStatus(id, status) { await api('PUT', `/api/admin/bookings/${id}/status`, { status }); toast('Status updated'); await loadBookings(); }
 
 async function invoiceBooking(id) {
-  if (!confirm('Create a Xero invoice for this booking and email it to the customer?')) return;
-  try { const r = await api('POST', `/api/admin/bookings/${id}/invoice`, { sendEmail: true }); toast(`Invoice ${r.invoiceNumber} created and emailed!`); await loadBookings(); }
+  if (!confirm('Create a draft invoice in Xero for this booking? It will not be emailed automatically.')) return;
+  try { const r = await api('POST', `/api/admin/bookings/${id}/invoice`, { sendEmail: false, status: 'DRAFT' }); toast(`Draft invoice ${r.invoiceNumber || ''} created in Xero.`); await loadBookings(); }
   catch (err) { toast(err.message, 'error'); }
 }
 
@@ -248,6 +259,16 @@ async function openClientModal(id) {
         </div>`;
     });
   }
+  const appInvoices = Array.isArray(customer.applicationInvoices) ? customer.applicationInvoices : [];
+  html += `
+    <div class="card" style="margin-top:16px">
+      <div class="card-header"><div class="card-title">Application Xero draft invoices</div></div>
+      <div class="card-body" style="font-size:13px;color:var(--text2);line-height:1.7">
+        <div>Status: <b>${customer.applicationInvoiceStatus || 'not_created'}</b>${customer.applicationInvoicesCreatedAt ? ` · ${new Date(customer.applicationInvoicesCreatedAt).toLocaleString()}` : ''}</div>
+        ${customer.applicationInvoiceError ? `<div style="color:var(--red);margin-top:6px">${customer.applicationInvoiceError}</div>` : ''}
+        ${appInvoices.length ? `<ul style="margin:8px 0 0 18px;padding:0">${appInvoices.map((inv) => `<li>${inv.reference}: ${inv.xeroInvoiceNumber ? '#' + inv.xeroInvoiceNumber : 'Draft'} · ${inv.serviceName || ''} · ${fmtCurrency(inv.amount || 0)}</li>`).join('')}</ul>` : '<div style="margin-top:6px">No application drafts recorded yet.</div>'}
+      </div>
+    </div>`;
   document.getElementById('client-modal-body').innerHTML = html;
   document.getElementById('client-modal').classList.add('open');
 }
@@ -269,7 +290,7 @@ async function loadXeroStatus() {
     actionsEl.innerHTML = '';
   } else if (status.connected) {
     titleEl.textContent = `Connected to ${status.tenantName}`;
-    descEl.textContent = `Connected on ${new Date(status.connectedAt).toLocaleString()}. Invoices will be created in this Xero organisation.`;
+    descEl.textContent = `Connected on ${new Date(status.connectedAt).toLocaleString()}. Draft invoices will be created in this Xero organisation for review before sending.`;
     actionsEl.innerHTML = '<button class="btn btn-secondary btn-sm" onclick="disconnectXero()">Disconnect</button>';
   } else {
     titleEl.textContent = 'Xero settings saved — ready to connect';
