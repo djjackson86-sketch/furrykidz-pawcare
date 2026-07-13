@@ -185,7 +185,7 @@
     <div class="modal-body">
       <form id="booking-form">
         <div class="form-row"><label>Dog</label><select id="booking-pet" required></select></div>
-        <div class="form-row"><label>Services</label><div id="booking-services" class="service-checklist"></div><div class="field-hint">Select up to 4 services for this booking request.</div></div>
+        <div class="form-row"><label>Services</label><div id="booking-services" class="service-checklist"></div><div class="field-hint">Select up to 20 daycare/services items for this booking request. Doggy Hotel accommodation is booked separately.</div></div>
         <div class="form-row"><label>Date</label><input type="date" id="booking-date" required></div>
         <div class="form-row"><label>Notes for us</label><textarea id="booking-notes" placeholder="Gate code, special instructions, etc."></textarea></div>
       </form>
@@ -213,8 +213,8 @@
         </div>
         <div id="boarding-availability"></div>
         <div class="form-row-2">
-          <div><label>Pet Taxi pickup needed?</label><select id="boarding-pickup"><option value="">No thanks</option><option value="yes">Yes please</option></select></div>
-          <div><label>Pet Taxi dropoff needed?</label><select id="boarding-dropoff"><option value="">No thanks</option><option value="yes">Yes please</option></select></div>
+          <div><label>Transport pick up</label><select id="boarding-pickup"><option value="">No thanks</option><option value="am">Yes — AM pickup</option><option value="pm">Yes — PM pickup</option></select></div>
+          <div><label>Transport drop off</label><select id="boarding-dropoff"><option value="">No thanks</option><option value="am">Yes — AM drop off</option><option value="pm">Yes — PM drop off</option></select></div>
         </div>
         <div class="form-row"><label>Notes (food schedule, special requests)</label><textarea id="boarding-notes"></textarea></div>
       </form>
@@ -226,9 +226,13 @@
   </div>
 </div>
 
-<script src="app.js?v=20260711-xero-cache-fix"></script>
+<script src="app.js?v=20260711-booking-transport-fix"></script>
 <script>
 let me = null, pets = [], services = [];
+const MAX_STANDARD_SERVICES = 20;
+function isAccommodationService(service) {
+  return service && (service.category === 'Luxury Accommodation' || String(service.id || '').startsWith('la-'));
+}
 
 async function init() {
   const { customer } = await api('GET', '/api/auth/me');
@@ -397,7 +401,7 @@ function openModal() {
   if (!pets.length) { toast('Add a dog first before booking.', 'error'); navigate('pets'); return; }
   document.getElementById('booking-pet').innerHTML = pets.map((p) => `<option value="${p.id}">${p.name}</option>`).join('');
   const byCategory = {};
-  services.forEach((s) => { (byCategory[s.category] = byCategory[s.category] || []).push(s); });
+  services.filter((s) => !isAccommodationService(s)).forEach((s) => { (byCategory[s.category] = byCategory[s.category] || []).push(s); });
   document.getElementById('booking-services').innerHTML = Object.entries(byCategory).map(([cat, list]) => `
     <div class="service-group">
       <div class="service-group-title">${cat}</div>
@@ -418,9 +422,9 @@ function closeModal() { document.getElementById('booking-modal').classList.remov
 
 function enforceServiceSelectionLimit(e) {
   const selected = document.querySelectorAll('input[name="booking-service"]:checked');
-  if (selected.length > 4) {
+  if (selected.length > MAX_STANDARD_SERVICES) {
     e.target.checked = false;
-    toast('You can select up to 4 services per booking request.', 'error');
+    toast(`You can select up to ${MAX_STANDARD_SERVICES} services per booking request.`, 'error');
   }
 }
 
@@ -429,7 +433,7 @@ async function submitBooking() {
   if (!form.reportValidity()) return;
   const serviceIds = Array.from(document.querySelectorAll('input[name="booking-service"]:checked')).map((el) => el.value);
   if (!serviceIds.length) { toast('Select at least one service.', 'error'); return; }
-  if (serviceIds.length > 4) { toast('Select no more than 4 services.', 'error'); return; }
+  if (serviceIds.length > MAX_STANDARD_SERVICES) { toast(`Select no more than ${MAX_STANDARD_SERVICES} services.`, 'error'); return; }
   try {
     await api('POST', '/api/bookings', {
       petId: document.getElementById('booking-pet').value,
@@ -548,8 +552,10 @@ async function submitBoarding() {
       location: document.getElementById('boarding-location').value,
       checkInDate: document.getElementById('boarding-checkin').value,
       checkOutDate: document.getElementById('boarding-checkout').value,
-      transportPickup: document.getElementById('boarding-pickup').value === 'yes',
-      transportDropoff: document.getElementById('boarding-dropoff').value === 'yes',
+      transportPickup: !!document.getElementById('boarding-pickup').value,
+      transportDropoff: !!document.getElementById('boarding-dropoff').value,
+      transportPickupWindow: document.getElementById('boarding-pickup').value,
+      transportDropoffWindow: document.getElementById('boarding-dropoff').value,
       notes: document.getElementById('boarding-notes').value,
     });
     closeBoardingModal();

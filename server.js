@@ -7,6 +7,8 @@ const path = require('path');
 const db = require('./db');
 const xero = require('./xero');
 
+const MAX_STANDARD_SERVICES = 20;
+
 const app = express();
 app.set('trust proxy', true);
 app.use(express.json({ limit: '15mb' })); // higher limit so dog photos / vaccination card images can be uploaded as base64
@@ -41,6 +43,13 @@ function requireStaff(req, res, next) {
 function publicCustomer(c) {
   const { passwordHash, ...rest } = c;
   return rest;
+}
+function isAccommodationService(service) {
+  return service && (service.category === 'Luxury Accommodation' || String(service.id || '').startsWith('la-'));
+}
+function normalizeTransportWindow(value) {
+  const normalized = String(value || '').toLowerCase();
+  return normalized === 'am' || normalized === 'pm' ? normalized : '';
 }
 
 // Returns an array of YYYY-MM-DD strings for every night of a boarding stay (check-in inclusive, check-out exclusive — the dog isn't there the night they leave).
@@ -274,11 +283,13 @@ app.get('/api/staff/bookings', requireStaff, (req, res) => {
 });
 
 function makeCollectionItem(booking, customer, pet, direction, date, reason) {
+  const transportWindow = direction === 'pickup' ? booking.transportPickupWindow : booking.transportDropoffWindow;
+  const windowLabel = transportWindow ? transportWindow.toUpperCase() : '';
   return {
     bookingId: booking.id,
     direction, // 'pickup' = collecting the dog from the customer | 'dropoff' = returning the dog to the customer
     date,
-    time: booking.time || '',
+    time: windowLabel || booking.time || '',
     reason,
     status: booking.status,
     customerName: customer.fullName,
@@ -330,8 +341,11 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
   const {
     petId, serviceId, serviceIds, date, time, notes,
     type, checkInDate, checkOutDate, location, transportPickup, transportDropoff,
+    transportPickupWindow, transportDropoffWindow,
   } = req.body;
   const bookingType = type === 'boarding' ? 'boarding' : 'standard';
+  const pickupWindow = normalizeTransportWindow(transportPickupWindow);
+  const dropoffWindow = normalizeTransportWindow(transportDropoffWindow);
 
   if (bookingType === 'boarding') {
     if (!petId || !checkInDate || !checkOutDate) {
@@ -351,8 +365,8 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
     if (!petId || !selectedServiceIds.length || !date) {
       return res.status(400).json({ error: 'Dog, at least one service, and date are required.' });
     }
-    if ([...new Set(selectedServiceIds.filter(Boolean))].length > 4) {
-      return res.status(400).json({ error: 'You can select up to 4 services per booking request.' });
+    if ([...new Set(selectedServiceIds.filter(Boolean))].length > MAX_STANDARD_SERVICES) {
+      return res.status(400).json({ error: `You can select up to ${MAX_STANDARD_SERVICES} services per booking request.` });
     }
   }
 
@@ -366,6 +380,7 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
     const services = db.getServices();
     selectedServices = uniqueIds.map((id) => services.find((s) => s.id === id));
     if (!selectedServices.length || selectedServices.some((s) => !s)) return res.status(400).json({ error: 'Invalid service selected.' });
+    if (selectedServices.some(isAccommodationService)) return res.status(400).json({ error: 'Doggy Hotel accommodation must be booked with the separate Book Doggy Hotel form.' });
   }
 
   const bookings = db.getBookings();
@@ -380,8 +395,10 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
     checkInDate: bookingType === 'boarding' ? checkInDate : null,
     checkOutDate: bookingType === 'boarding' ? checkOutDate : null,
     location: location || 'kyalami',
-    transportPickup: !!transportPickup,
-    transportDropoff: !!transportDropoff,
+    transportPickup: !!transportPickup || !!pickupWindow,
+    transportDropoff: !!transportDropoff || !!dropoffWindow,
+    transportPickupWindow: pickupWindow,
+    transportDropoffWindow: dropoffWindow,
     collectionNotes: '', // staff-only notes for picking the dog up
     dropoffNotes: '', // staff-only notes for dropping the dog off
     notes: notes || '',
