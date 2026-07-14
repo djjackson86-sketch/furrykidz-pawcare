@@ -8,6 +8,7 @@ const db = require('./db');
 const xero = require('./xero');
 
 const MAX_STANDARD_SERVICES = 20;
+const PRIVACY_POLICY_VERSION = 'furrykidz-popia-v1-2026-07-13';
 
 const app = express();
 app.set('trust proxy', true);
@@ -204,9 +205,12 @@ function boardingOccupancy(location, nights, excludeBookingId) {
 // ============ AUTH ============
 
 app.post('/api/auth/register', async (req, res) => {
-  const { firstName, lastName, email, phone, password, clientAccountNumber, emergencyNumber, location, packageType } = req.body;
+  const { firstName, lastName, email, phone, password, clientAccountNumber, emergencyNumber, location, packageType, privacyConsentAccepted, privacyConsentVersion } = req.body;
   if (!firstName || !lastName || !email || !password) {
     return res.status(400).json({ error: 'First name, last name, email and password are required.' });
+  }
+  if (privacyConsentAccepted !== true) {
+    return res.status(400).json({ error: 'You must agree to the POPIA Privacy Notice before creating an account.' });
   }
   const customers = db.getCustomers();
   if (customers.find((c) => c.email.toLowerCase() === email.toLowerCase())) {
@@ -220,6 +224,12 @@ app.post('/api/auth/register', async (req, res) => {
     emergencyNumber: emergencyNumber || '',
     location: location || 'kyalami',
     packageType: packageType || 'adhoc', // 'recurring' (invoiced 1st of month) or 'adhoc' (pay per visit)
+    privacyConsentAccepted: true,
+    privacyConsentVersion: privacyConsentVersion || PRIVACY_POLICY_VERSION,
+    privacyConsentAcceptedAt: new Date().toISOString(),
+    privacyConsentMethod: 'account_signup',
+    privacyConsentIp: req.ip || '',
+    privacyConsentUserAgent: req.get('user-agent') || '',
     createdAt: new Date().toISOString(),
   };
   customers.push(customer);

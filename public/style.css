@@ -113,6 +113,13 @@ tr:last-child td { border-bottom: none; }
 .cal-pill.status-confirmed { background: var(--blue-light); color: var(--blue); }
 .cal-pill.status-completed { background: var(--green-light); color: var(--green); }
 .field-hint { margin-top: 6px; font-size: 11.5px; color: var(--text3); }
+.consent-box { display:flex; align-items:flex-start; gap:10px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; margin:0 0 14px; cursor:pointer; font-size:12.5px; color:var(--text2); line-height:1.55; }
+.consent-box input { width:16px; height:16px; margin-top:2px; flex-shrink:0; accent-color:var(--accent); }
+.consent-box a { color:var(--accent); font-weight:700; text-decoration:underline; }
+.privacy-notice { font-size:13px; color:var(--text2); line-height:1.7; }
+.privacy-notice h4 { margin:14px 0 6px; color:var(--text); font-size:13px; }
+.privacy-notice p { margin:8px 0; }
+.privacy-notice ul { padding-left:18px; margin:6px 0 10px; }
 .service-checklist { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); max-height: 280px; overflow-y: auto; }
 .service-group { border-bottom: 1px solid var(--border); }
 .service-group:last-child { border-bottom: 0; }

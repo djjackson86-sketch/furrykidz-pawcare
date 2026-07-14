@@ -35,6 +35,10 @@
         <select id="reg-package"><option value="adhoc">Adhoc — pay per visit</option><option value="recurring">Recurring — invoiced 1st of month</option></select>
       </div>
       <div class="form-row"><label>Password</label><input type="password" id="reg-password" required></div>
+      <label class="consent-box">
+        <input type="checkbox" id="reg-privacy-consent" required>
+        <span>I agree that Furry Kidz Pet Services may collect and process my and my dog's personal information to create my account, manage bookings, contact me, keep health/safety records, and prepare invoices, in accordance with POPIA. <a href="javascript:void(0)" onclick="openPrivacyModal()">View Privacy Notice</a></span>
+      </label>
       <button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">Create Account</button>
     </form>
 
@@ -226,12 +230,58 @@
   </div>
 </div>
 
-<script src="app.js?v=20260711-booking-transport-fix"></script>
+<div class="modal-overlay" id="privacy-modal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-header"><div class="modal-title">🔒 Furry Kidz POPIA Privacy Notice</div><button class="close-btn" onclick="closePrivacyModal()">✕</button></div>
+    <div class="modal-body privacy-notice">
+      <div class="field-hint">Effective date: 13 July 2026 · Version: furrykidz-popia-v1-2026-07-13</div>
+      <p>Your privacy matters to us. This notice explains what personal information Furry Kidz Pet Services collects, why we collect it, and how we protect it in line with South Africa's <strong>Protection of Personal Information Act, 4 of 2013 (POPIA)</strong>.</p>
+      <h4>1. Who we are</h4>
+      <p>Furry Kidz Pet Services is the responsible party for personal information collected through this member portal, daycare booking, Doggy Hotel, transport, grooming, pet care, and invoicing workflow.</p>
+      <h4>2. Information we collect</h4>
+      <ul>
+        <li>Your name, email address, phone number, emergency contact number, address, preferred location, package type, and client account number.</li>
+        <li>Account login details, stored as a secure password hash.</li>
+        <li>Your dog's profile: name, breed, age, weight, notes, photo, vaccination card/image, vaccination date, deworming date, tick/flea treatment date, sterilisation status, food routine, medication needs, and related care instructions.</li>
+        <li>Booking details: service selections, dates, Doggy Hotel check-in/check-out dates, transport pickup/drop-off choices, AM/PM transport windows, notes, booking status, and invoice status.</li>
+        <li>Operational notes needed by authorised staff for collection, delivery, care, safety, billing, and customer support.</li>
+      </ul>
+      <h4>3. Why we collect it</h4>
+      <p>We process this information to create and manage your account, assess whether we can safely accept your dog, provide daycare/Doggy Hotel/grooming/transport services, contact you about bookings, handle emergency or welfare matters, prepare invoices and payment records, and comply with legal, tax, safety, and business record obligations.</p>
+      <h4>4. Sharing and third-party services</h4>
+      <p>We do not sell your personal information. We only share or store information where needed to provide the service, including secure hosting/database systems, authorised Furry Kidz staff, accounting/invoicing systems such as Xero where enabled, and where required by law.</p>
+      <h4>5. How long we keep it</h4>
+      <p>We keep active account, pet, booking, and operational records for as long as needed to provide services and maintain safety history. Financial and invoice records may be retained for the period required under South African tax and accounting laws. You may ask us to correct or delete information where lawful and practical.</p>
+      <h4>6. How we protect it</h4>
+      <p>The portal uses HTTPS and access-controlled admin/staff areas. Passwords are stored as hashes, not plain text. Staff access is limited to operational information needed for bookings, care, collections, and deliveries.</p>
+      <h4>7. Your POPIA rights</h4>
+      <ul>
+        <li>Ask what personal information we hold about you.</li>
+        <li>Request correction of inaccurate information.</li>
+        <li>Object to processing or request deletion where POPIA allows.</li>
+        <li>Lodge a complaint with the Information Regulator of South Africa.</li>
+      </ul>
+      <p><strong>Information Regulator:</strong> <a href="https://www.justice.gov.za/inforeg/" target="_blank">www.justice.gov.za/inforeg</a> · <a href="mailto:inforeg@justice.gov.za">inforeg@justice.gov.za</a></p>
+      <p class="field-hint">By ticking the consent checkbox, you confirm that you have read this notice and consent to Furry Kidz processing the information listed above for account, booking, pet care, safety, transport, invoicing, and support purposes.</p>
+    </div>
+  </div>
+</div>
+
+<script src="app.js?v=20260713-popia-consent"></script>
 <script>
 let me = null, pets = [], services = [];
 const MAX_STANDARD_SERVICES = 20;
+const PRIVACY_POLICY_VERSION = 'furrykidz-popia-v1-2026-07-13';
 function isAccommodationService(service) {
   return service && (service.category === 'Luxury Accommodation' || String(service.id || '').startsWith('la-'));
+}
+function openPrivacyModal() { document.getElementById('privacy-modal').classList.add('open'); }
+function closePrivacyModal() { document.getElementById('privacy-modal').classList.remove('open'); }
+function getFurryKidzPrivacyConsentPayload() {
+  return {
+    privacyConsentAccepted: document.getElementById('reg-privacy-consent').checked,
+    privacyConsentVersion: PRIVACY_POLICY_VERSION,
+  };
 }
 
 async function init() {
@@ -267,12 +317,15 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 document.getElementById('register-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
+    const consent = getFurryKidzPrivacyConsentPayload();
+    if (!consent.privacyConsentAccepted) { authError('Please agree to the POPIA Privacy Notice before creating your account.'); return; }
     const { customer } = await api('POST', '/api/auth/register', {
       firstName: document.getElementById('reg-first').value, lastName: document.getElementById('reg-last').value,
       email: document.getElementById('reg-email').value, phone: document.getElementById('reg-phone').value,
       password: document.getElementById('reg-password').value,
       location: document.getElementById('reg-location').value,
       packageType: document.getElementById('reg-package').value,
+      ...consent,
     });
     me = customer; showApp();
   } catch (err) { authError(err.message); }
