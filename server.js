@@ -91,6 +91,37 @@ function makeApplicationInvoiceSpecs(customer, pet, services = db.getServices())
   ];
 }
 
+function suppliedOrFallback(value) {
+  const text = String(value || '').trim();
+  return text || 'Not supplied';
+}
+
+function formatTransportService(label, windowValue) {
+  const window = normalizeTransportWindow(windowValue);
+  return window ? `${label} transport (${window.toUpperCase()})` : `${label} transport`;
+}
+
+function trimInvoiceDescription(description, maxLength = 3900) {
+  const text = String(description || '');
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function buildBoardingInvoiceDescription({ booking, pet, customer, nights, locations = db.getLocations() }) {
+  const requestedServices = ['Luxury Accommodation'];
+  if (booking.transportPickup) requestedServices.push(formatTransportService('Pickup', booking.transportPickupWindow));
+  if (booking.transportDropoff) requestedServices.push(formatTransportService('Dropoff', booking.transportDropoffWindow));
+  const location = locations.find((l) => l.id === booking.location);
+  const locationName = location ? location.name : suppliedOrFallback(booking.location);
+
+  return trimInvoiceDescription([
+    `Luxury Accommodation — ${pet ? pet.name : 'Dog'} (${booking.checkInDate} to ${booking.checkOutDate}, ${nights} night${nights > 1 ? 's' : ''})`,
+    `Services requested: ${requestedServices.join('; ')}`,
+    `Location required: ${locationName}`,
+    `Client address: ${suppliedOrFallback(customer && customer.address)}`,
+    `Client cell: ${suppliedOrFallback(customer && customer.phone)}`,
+  ].join('\n'));
+}
+
 async function maybeCreateApplicationDraftInvoices(customerId, pet) {
   const customers = db.getCustomers();
   const idx = customers.findIndex((c) => c.id === customerId);
@@ -667,7 +698,7 @@ app.post('/api/admin/bookings/:id/invoice', requireAdmin, async (req, res) => {
       const nights = Math.max(1, Math.round((new Date(booking.checkOutDate) - new Date(booking.checkInDate)) / 86400000));
       const perNight = db.getServices().find((s) => s.id === 'la-night');
       lineItems = [{
-        description: `Luxury Accommodation — ${pet ? pet.name : 'Dog'} (${booking.checkInDate} to ${booking.checkOutDate}, ${nights} night${nights > 1 ? 's' : ''})`,
+        description: buildBoardingInvoiceDescription({ booking, pet, customer, nights }),
         quantity: nights,
         unitAmount: perNight ? perNight.price : 327,
         accountCode: perNight ? perNight.xeroAccountCode : undefined,
