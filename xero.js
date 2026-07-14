@@ -150,10 +150,62 @@ function clearConfig() {
   db.saveXeroConfig(null);
 }
 
+function uniqueNonBlank(values) {
+  const seen = new Set();
+  const result = [];
+  values.forEach((value) => {
+    const clean = String(value || '').trim().replace(/\s+/g, ' ');
+    if (!clean) return;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push(clean);
+  });
+  return result;
+}
+
+function truncateContactName(name, maxLength = 255) {
+  const clean = String(name || '').trim().replace(/\s+/g, ' ');
+  if (clean.length <= maxLength) return clean;
+  return clean.slice(0, Math.max(0, maxLength - 1)).trimEnd() + '…';
+}
+
+function buildXeroContactName(customer, pets = []) {
+  const ownerName = truncateContactName(
+    customer.fullName || [customer.firstName, customer.lastName].filter(Boolean).join(' ') || customer.email || 'Furry Kidz Client'
+  );
+  const dogNames = uniqueNonBlank(pets.map((pet) => pet.name));
+  if (!dogNames.length) return ownerName;
+  return truncateContactName(`${ownerName} - ${dogNames.join(', ')}`);
+}
+
+function petsForCustomer(customer) {
+  return db.getPets().filter((pet) => pet.customerId === customer.id);
+}
+
+async function updateContactNameIfNeeded(conn, contact, desiredName) {
+  const currentName = String(contact.name || '').trim();
+  if (!desiredName || currentName === desiredName) return;
+  try {
+    await conn.client.accountingApi.updateContact(conn.tenantId, contact.contactID, {
+      contacts: [{
+        contactID: contact.contactID,
+        name: desiredName,
+      }],
+    });
+  } catch (err) {
+    // A contact rename should not block draft creation if Xero rejects it (for example,
+    // because another contact already uses the generated name). Keep using the existing
+    // email-matched contact and log enough context without exposing secrets.
+    console.error('Xero contact rename skipped:', err.message || err);
+  }
+}
+
 async function findOrCreateContact(customer) {
   const conn = await ensureConnected();
   if (!conn.connected) throw new Error('Xero is not connected yet. Go to Admin > Xero Setup and connect first.');
 
+  const desiredName = buildXeroContactName(customer, petsForCustomer(customer));
   const email = String(customer.email || '').trim();
   const escapedEmail = email.replace(/"/g, '\\"');
   const existing = email ? await conn.client.accountingApi.getContacts(
@@ -163,12 +215,14 @@ async function findOrCreateContact(customer) {
   ) : { body: { contacts: [] } };
 
   if (existing.body.contacts && existing.body.contacts.length > 0) {
-    return { contactID: existing.body.contacts[0].contactID, client: conn.client, tenantId: conn.tenantId };
+    const contact = existing.body.contacts[0];
+    await updateContactNameIfNeeded(conn, contact, desiredName);
+    return { contactID: contact.contactID, client: conn.client, tenantId: conn.tenantId };
   }
 
   const created = await conn.client.accountingApi.createContacts(conn.tenantId, {
     contacts: [{
-      name: customer.fullName,
+      name: desiredName,
       firstName: customer.firstName,
       lastName: customer.lastName,
       emailAddress: customer.email,
@@ -255,6 +309,7 @@ module.exports = {
   clearConfig,
   disconnect,
   buildInvoicePayload,
+  buildXeroContactName,
   createInvoiceForBooking,
   invoiceUrl,
 };
