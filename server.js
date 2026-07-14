@@ -660,6 +660,9 @@ app.post('/api/admin/bookings/:id/invoice', requireAdmin, async (req, res) => {
     if (!customer) return res.status(400).json({ error: 'Missing customer data for this booking.' });
 
     let lineItems;
+    const invoiceReference = booking.type === 'boarding'
+      ? `${booking.checkInDate} to ${booking.checkOutDate}`
+      : undefined;
     if (booking.type === 'boarding') {
       const nights = Math.max(1, Math.round((new Date(booking.checkOutDate) - new Date(booking.checkInDate)) / 86400000));
       const perNight = db.getServices().find((s) => s.id === 'la-night');
@@ -690,6 +693,7 @@ app.post('/api/admin/bookings/:id/invoice', requireAdmin, async (req, res) => {
       lineItems,
       sendEmail: false,
       status: 'DRAFT',
+      reference: invoiceReference,
     });
 
     bookings[idx].invoiceStatus = 'draft';
