@@ -6,6 +6,7 @@ const { randomUUID } = require('crypto');
 const path = require('path');
 const db = require('./db');
 const xero = require('./xero');
+const telegram = require('./telegram');
 
 const MAX_STANDARD_SERVICES = 20;
 const PRIVACY_POLICY_VERSION = 'furrykidz-popia-v1-2026-07-13';
@@ -235,6 +236,7 @@ app.post('/api/auth/register', async (req, res) => {
   };
   customers.push(customer);
   db.saveCustomers(customers);
+  telegram.notifyNewCustomer(customer).catch((err) => console.warn('Telegram new-customer notification failed:', err.message));
   req.session.customerId = customer.id;
   res.json({ customer: publicCustomer(customer) });
 });
@@ -542,6 +544,8 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
     : [makeBooking(null)];
   bookings.push(...newBookings);
   db.saveBookings(bookings);
+  const customer = db.getCustomers().find((c) => c.id === req.session.customerId) || {};
+  telegram.notifyNewBooking(customer, pet, newBookings, db.getServices()).catch((err) => console.warn('Telegram new-booking notification failed:', err.message));
   res.json({ booking: newBookings[0], bookings: newBookings });
 });
 
@@ -700,6 +704,37 @@ app.post('/api/admin/bookings/:id/invoice', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || 'Failed to create Xero invoice.' });
+  }
+});
+
+// Internal cron/webhook endpoint for Telegram daily summaries. Protected by TELEGRAM_CRON_SECRET.
+app.post('/api/internal/telegram/daily-summary', async (req, res) => {
+  const secret = process.env.TELEGRAM_CRON_SECRET || '';
+  if (!secret || req.get('x-cron-secret') !== secret) {
+    return res.status(401).json({ error: 'Unauthorized.' });
+  }
+  try {
+    const targetDate = req.body && req.body.date ? req.body.date : undefined;
+    await telegram.sendDailySummary(db, targetDate);
+    res.json({ ok: true, date: targetDate || telegram.tomorrowZA() });
+  } catch (err) {
+    console.error('Telegram daily summary failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to send Telegram summary.' });
+  }
+});
+
+// Internal one-shot smoke test for verifying Telegram group connectivity after configuration.
+app.post('/api/internal/telegram/test', async (req, res) => {
+  const secret = process.env.TELEGRAM_CRON_SECRET || '';
+  if (!secret || req.get('x-cron-secret') !== secret) {
+    return res.status(401).json({ error: 'Unauthorized.' });
+  }
+  try {
+    await telegram.sendMessage('🐾 <b>Furry Kidz</b>\n━━━━━━━━━━━━━━\n✅ Telegram notifications are connected.');
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Telegram test failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to send Telegram test.' });
   }
 });
 
