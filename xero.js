@@ -196,6 +196,11 @@ function normalizeInvoiceStatus(value) {
   return raw === 'AUTHORISED' ? 'AUTHORISED' : 'DRAFT';
 }
 
+function invoiceUrl(invoiceId) {
+  if (!invoiceId) return null;
+  return `https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${encodeURIComponent(invoiceId)}`;
+}
+
 function buildInvoicePayload({ contactID, booking, lineItems, accountCode, lineAmountTypes, status = 'DRAFT', reference, dueDate }) {
   const resolvedLineAmountTypes = normalizeLineAmountType(lineAmountTypes);
   const fallbackAccountCode = accountCode || process.env.XERO_DEFAULT_ACCOUNT_CODE || '200';
@@ -251,4 +256,5 @@ module.exports = {
   disconnect,
   buildInvoicePayload,
   createInvoiceForBooking,
+  invoiceUrl,
 };

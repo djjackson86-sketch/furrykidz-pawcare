@@ -133,6 +133,7 @@ async function maybeCreateApplicationDraftInvoices(customerId, pet) {
         amount: spec.service.price,
         xeroInvoiceId: invoice.invoiceID,
         xeroInvoiceNumber: invoice.invoiceNumber || null,
+        xeroInvoiceUrl: xero.invoiceUrl(invoice.invoiceID),
         xeroStatus: invoice.status || 'DRAFT',
         createdAt: new Date().toISOString(),
       });
@@ -691,10 +692,11 @@ app.post('/api/admin/bookings/:id/invoice', requireAdmin, async (req, res) => {
     bookings[idx].xeroInvoiceStatus = invoice.status || 'DRAFT';
     bookings[idx].xeroInvoiceId = invoice.invoiceID;
     bookings[idx].xeroInvoiceNumber = invoice.invoiceNumber;
+    bookings[idx].xeroInvoiceUrl = xero.invoiceUrl(invoice.invoiceID);
     bookings[idx].xeroDraftCreatedAt = new Date().toISOString();
     db.saveBookings(bookings);
 
-    res.json({ ok: true, invoiceNumber: invoice.invoiceNumber, invoiceId: invoice.invoiceID, status: invoice.status || 'DRAFT', emailed: false });
+    res.json({ ok: true, invoiceNumber: invoice.invoiceNumber, invoiceId: invoice.invoiceID, invoiceUrl: xero.invoiceUrl(invoice.invoiceID), status: invoice.status || 'DRAFT', emailed: false });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || 'Failed to create Xero invoice.' });

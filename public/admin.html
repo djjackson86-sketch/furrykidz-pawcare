@@ -173,6 +173,17 @@ function invoiceLabel(b) {
   return 'Not yet';
 }
 
+function xeroInvoiceUrl(invoice) {
+  const id = invoice && (invoice.xeroInvoiceId || invoice.invoiceId);
+  return invoice && invoice.xeroInvoiceUrl ? invoice.xeroInvoiceUrl : (id ? `https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${encodeURIComponent(id)}` : '');
+}
+
+function xeroInvoiceLink(invoice) {
+  const url = xeroInvoiceUrl(invoice);
+  if (!url) return '';
+  return `<a class="btn btn-secondary btn-sm" href="${url}" target="_blank" rel="noopener noreferrer" title="Open this invoice in Xero">Xero Link</a>`;
+}
+
 function canCreateInvoiceDraft(b) {
   return !b.invoiceStatus || b.invoiceStatus === 'not_invoiced' || b.invoiceStatus === 'voided';
 }
@@ -199,7 +210,7 @@ function renderBookings() {
           <option value="completed" ${b.status === 'completed' ? 'selected' : ''}>Completed</option>
         </select>
       </td>
-      <td><span class="status status-${b.invoiceStatus || 'not_invoiced'}">${invoiceLabel(b)}</span></td>
+      <td><span class="status status-${b.invoiceStatus || 'not_invoiced'}">${invoiceLabel(b)}</span> ${xeroInvoiceLink(b)}</td>
       <td>${canCreateInvoiceDraft(b) ? `<button class="btn btn-xero btn-sm" onclick="invoiceBooking('${b.id}')">Create Xero Draft</button>` : ''}</td>`;
     tbody.appendChild(tr);
   });
@@ -266,7 +277,7 @@ async function openClientModal(id) {
       <div class="card-body" style="font-size:13px;color:var(--text2);line-height:1.7">
         <div>Status: <b>${customer.applicationInvoiceStatus || 'not_created'}</b>${customer.applicationInvoicesCreatedAt ? ` · ${new Date(customer.applicationInvoicesCreatedAt).toLocaleString()}` : ''}</div>
         ${customer.applicationInvoiceError ? `<div style="color:var(--red);margin-top:6px">${customer.applicationInvoiceError}</div>` : ''}
-        ${appInvoices.length ? `<ul style="margin:8px 0 0 18px;padding:0">${appInvoices.map((inv) => `<li>${inv.reference}: ${inv.xeroInvoiceNumber ? '#' + inv.xeroInvoiceNumber : 'Draft'} · ${inv.serviceName || ''} · ${fmtCurrency(inv.amount || 0)}</li>`).join('')}</ul>` : '<div style="margin-top:6px">No application drafts recorded yet.</div>'}
+        ${appInvoices.length ? `<ul style="margin:8px 0 0 18px;padding:0">${appInvoices.map((inv) => `<li>${inv.reference}: ${inv.xeroInvoiceNumber ? '#' + inv.xeroInvoiceNumber : 'Draft'} ${xeroInvoiceLink(inv)} · ${inv.serviceName || ''} · ${fmtCurrency(inv.amount || 0)}</li>`).join('')}</ul>` : '<div style="margin-top:6px">No application drafts recorded yet.</div>'}
       </div>
     </div>`;
   document.getElementById('client-modal-body').innerHTML = html;
