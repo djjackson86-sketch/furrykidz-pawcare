@@ -9,6 +9,7 @@ const xero = require('./xero');
 const telegram = require('./telegram');
 
 const MAX_STANDARD_SERVICES = 20;
+const MAX_BOARDING_EXTRA_SERVICES = 20;
 const PRIVACY_POLICY_VERSION = 'furrykidz-popia-v1-2026-07-13';
 
 const app = express();
@@ -48,6 +49,31 @@ function publicCustomer(c) {
 }
 function isAccommodationService(service) {
   return service && (service.category === 'Luxury Accommodation' || String(service.id || '').startsWith('la-'));
+}
+function normalizeExtraServiceIds(value, services = db.getServices()) {
+  const requested = Array.isArray(value) ? value : [];
+  const uniqueIds = [...new Set(requested.map((id) => String(id || '').trim()).filter(Boolean))];
+  if (uniqueIds.length > MAX_BOARDING_EXTRA_SERVICES) {
+    const err = new Error(`You can select up to ${MAX_BOARDING_EXTRA_SERVICES} extra services for Doggy Hotel.`);
+    err.status = 400;
+    throw err;
+  }
+  const extras = uniqueIds.map((id) => services.find((s) => s.id === id));
+  if (extras.some((s) => !s)) {
+    const err = new Error('Invalid extra service selected.');
+    err.status = 400;
+    throw err;
+  }
+  if (extras.some(isAccommodationService)) {
+    const err = new Error('Luxury Accommodation cannot be selected as a Doggy Hotel extra service.');
+    err.status = 400;
+    throw err;
+  }
+  return { ids: extras.map((s) => s.id), services: extras };
+}
+function extraServicesForBooking(booking, services = db.getServices()) {
+  const ids = Array.isArray(booking.extraServiceIds) ? booking.extraServiceIds : [];
+  return ids.map((id) => services.find((s) => s.id === id)).filter(Boolean);
 }
 function normalizeTransportWindow(value) {
   const normalized = String(value || '').toLowerCase();
@@ -106,8 +132,9 @@ function trimInvoiceDescription(description, maxLength = 3900) {
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
-function buildBoardingInvoiceDescription({ booking, pet, customer, nights, locations = db.getLocations() }) {
-  const requestedServices = ['Luxury Accommodation'];
+function buildBoardingInvoiceDescription({ booking, pet, customer, nights, locations = db.getLocations(), services = db.getServices() }) {
+  const extraServices = extraServicesForBooking(booking, services);
+  const requestedServices = ['Luxury Accommodation', ...extraServices.map((s) => s.name)];
   if (booking.transportPickup) requestedServices.push(formatTransportService('Pickup', booking.transportPickupWindow));
   if (booking.transportDropoff) requestedServices.push(formatTransportService('Dropoff', booking.transportDropoffWindow));
   const location = locations.find((l) => l.id === booking.location);
@@ -440,6 +467,7 @@ app.get('/api/staff/bookings', requireStaff, (req, res) => {
       customer: publicCustomer(customers.find((c) => c.id === b.customerId) || {}),
       pet: pets.find((p) => p.id === b.petId) || null,
       service: services.find((s) => s.id === b.serviceId) || null,
+      extraServices: extraServicesForBooking(b, services),
     }))
     .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
   res.json({ bookings: enriched });
@@ -504,7 +532,7 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
   const {
     petId, serviceId, serviceIds, date, time, notes,
     type, checkInDate, checkOutDate, location, transportPickup, transportDropoff,
-    transportPickupWindow, transportDropoffWindow,
+    transportPickupWindow, transportDropoffWindow, extraServiceIds,
   } = req.body;
   const bookingType = type === 'boarding' ? 'boarding' : 'standard';
   const pickupWindow = normalizeTransportWindow(transportPickupWindow);
@@ -537,6 +565,14 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
   if (!pet) return res.status(400).json({ error: 'Invalid dog selected.' });
 
   let selectedServices = [];
+  let selectedExtraServiceIds = [];
+  if (bookingType === 'boarding') {
+    try {
+      selectedExtraServiceIds = normalizeExtraServiceIds(extraServiceIds).ids;
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message || 'Invalid extra services selected.' });
+    }
+  }
   if (bookingType === 'standard') {
     const requestedIds = Array.isArray(serviceIds) ? serviceIds : (serviceId ? [serviceId] : []);
     const uniqueIds = [...new Set(requestedIds)].filter(Boolean);
@@ -562,6 +598,7 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
     transportDropoff: !!transportDropoff || !!dropoffWindow,
     transportPickupWindow: pickupWindow,
     transportDropoffWindow: dropoffWindow,
+    extraServiceIds: bookingType === 'boarding' ? selectedExtraServiceIds : [],
     collectionNotes: '', // staff-only notes for picking the dog up
     dropoffNotes: '', // staff-only notes for dropping the dog off
     notes: notes || '',
@@ -602,6 +639,7 @@ app.get('/api/admin/bookings', requireAdmin, (req, res) => {
     customer: publicCustomer(customers.find((c) => c.id === b.customerId) || {}),
     pet: pets.find((p) => p.id === b.petId) || null,
     service: services.find((s) => s.id === b.serviceId) || null,
+    extraServices: extraServicesForBooking(b, services),
   })).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   res.json({ bookings: enriched });
 });
@@ -704,7 +742,14 @@ app.post('/api/admin/bookings/:id/invoice', requireAdmin, async (req, res) => {
         accountCode: perNight ? perNight.xeroAccountCode : undefined,
         taxType: perNight ? perNight.xeroTaxType : undefined,
         itemCode: perNight ? perNight.xeroItemCode : undefined,
-      }];
+      }, ...extraServicesForBooking(booking).map((service) => ({
+        description: `${service.name} — ${pet ? pet.name : 'Dog'} (Doggy Hotel extra, ${booking.checkInDate} to ${booking.checkOutDate})`,
+        quantity: 1,
+        unitAmount: service.price,
+        accountCode: service.xeroAccountCode,
+        taxType: service.xeroTaxType,
+        itemCode: service.xeroItemCode,
+      }))];
     } else {
       const service = db.getServices().find((s) => s.id === booking.serviceId);
       if (!service) return res.status(400).json({ error: 'Missing service data for this booking.' });

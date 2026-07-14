@@ -118,7 +118,7 @@
   </div>
 </div>
 
-<script src="app.js?v=20260713-popia-consent"></script>
+<script src="app.js?v=20260714-boarding-extras"></script>
 <script>
 let allBookings = [], allClients = [], currentFilter = 'all';
 
@@ -195,7 +195,9 @@ function renderBookings() {
   document.getElementById('bookings-empty').style.display = list.length ? 'none' : 'block';
   list.forEach((b) => {
     const tr = document.createElement('tr');
-    const serviceLabel = b.type === 'boarding' ? `🏨 Doggy Hotel (${b.checkInDate} → ${b.checkOutDate})${b.transportPickup ? ' · Pickup' : ''}${b.transportDropoff ? ' · Dropoff' : ''}` : (b.service ? b.service.name : '—');
+    const extraServices = Array.isArray(b.extraServices) ? b.extraServices : [];
+    const extrasLabel = extraServices.length ? ` · Extras: ${extraServices.map((s) => s.name).join(', ')}` : '';
+    const serviceLabel = b.type === 'boarding' ? `🏨 Doggy Hotel (${b.checkInDate} → ${b.checkOutDate})${extrasLabel}${b.transportPickup ? ' · Pickup' : ''}${b.transportDropoff ? ' · Dropoff' : ''}` : (b.service ? b.service.name : '—');
     const priceLabel = b.type === 'boarding' ? '—' : (b.service ? fmtCurrency(b.service.price) : '—');
     tr.innerHTML = `
       <td>${b.date} <span style="color:var(--text3)">${b.time || ''}</span></td>
@@ -378,8 +380,9 @@ function renderCalendar() {
     const key = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const dayBookings = byDate[key] || [];
     const pills = dayBookings.map((b) => {
+      const extraNames = Array.isArray(b.extraServices) && b.extraServices.length ? ` — Extras: ${b.extraServices.map((s) => s.name).join(', ')}` : '';
       const label = (b.type === 'boarding' ? '🏨 ' : '') + (b.customer.fullName || '').split(' ')[0] + (b.pet ? ' · ' + b.pet.name : '');
-      return `<div class="cal-pill status-${b.status}" title="${b.customer.fullName} — ${b.pet ? b.pet.name : ''}">${label}</div>`;
+      return `<div class="cal-pill status-${b.status}" title="${b.customer.fullName} — ${b.pet ? b.pet.name : ''}${extraNames}">${label}</div>`;
     }).join('');
     body.innerHTML += `<div class="cal-cell"><div class="cal-day">${day}</div>${pills}</div>`;
   }

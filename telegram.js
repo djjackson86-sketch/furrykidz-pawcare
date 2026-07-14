@@ -45,8 +45,16 @@ function tomorrowZA() {
   return addDays(todayZA(), 1);
 }
 
+function extraServiceNamesFor(booking, services) {
+  const ids = Array.isArray(booking.extraServiceIds) ? booking.extraServiceIds : [];
+  return ids.map((id) => services.find((s) => s.id === id)).filter(Boolean).map((s) => s.name);
+}
+
 function serviceNameFor(booking, services) {
-  if (booking.type === 'boarding') return 'Doggy Hotel';
+  if (booking.type === 'boarding') {
+    const extras = extraServiceNamesFor(booking, services);
+    return extras.length ? `Doggy Hotel + ${extras.join(', ')}` : 'Doggy Hotel';
+  }
   const service = services.find((s) => s.id === booking.serviceId);
   return service ? service.name : 'Service';
 }
@@ -85,6 +93,10 @@ function bookingLine(booking, { customers, pets, services }, options = {}) {
   ];
   if (price !== null) bits.push(`  💰 ${money(price)}`);
   if (transport.length) bits.push(`  🚐 ${escapeHtml(transport.join(' · '))}`);
+  if (booking.type === 'boarding') {
+    const extras = extraServiceNamesFor(booking, services);
+    if (extras.length) bits.push(`  ➕ ${escapeHtml(extras.join(', '))}`);
+  }
   if (options.includeStatus) bits.push(`  📌 ${escapeHtml(booking.status || 'pending')}`);
   return bits.join('\n');
 }
@@ -138,6 +150,7 @@ async function notifyNewBooking(customer, pet, newBookings, services) {
   const transport = [];
   if (first.transportPickup) transport.push(`pickup${first.transportPickupWindow ? ` ${String(first.transportPickupWindow).toUpperCase()}` : ''}`);
   if (first.transportDropoff) transport.push(`dropoff${first.transportDropoffWindow ? ` ${String(first.transportDropoffWindow).toUpperCase()}` : ''}`);
+  const extras = first.type === 'boarding' ? extraServiceNamesFor(first, services) : [];
   const datePart = first.type === 'boarding'
     ? `${first.checkInDate || first.date}${first.checkOutDate ? ` → ${first.checkOutDate}` : ''}`
     : first.date;
@@ -152,6 +165,7 @@ async function notifyNewBooking(customer, pet, newBookings, services) {
     `🧾 ${escapeHtml(serviceLabels.join(', '))}`,
     first.type !== 'boarding' ? `💰 ${money(total)}` : '',
     transport.length ? `🚐 ${escapeHtml(transport.join(' · '))}` : '',
+    extras.length ? `➕ ${escapeHtml(extras.join(', '))}` : '',
     first.notes ? `📝 ${escapeHtml(first.notes)}` : '',
   ].filter(Boolean).join('\n');
   return sendMessage(text);

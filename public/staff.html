@@ -80,7 +80,7 @@
   </div>
 </div>
 
-<script src="app.js?v=20260713-popia-consent"></script>
+<script src="app.js?v=20260714-boarding-extras"></script>
 <script>
 let collections = [], staffBookings = [], currentView = 'collections';
 let staffCalMonth = new Date().getMonth(), staffCalYear = new Date().getFullYear();
@@ -225,7 +225,8 @@ function renderStaffCalendar() {
     const pills = dayBookings.map((b) => {
       const customerName = b.customer && b.customer.fullName ? b.customer.fullName : 'Client';
       const petName = b.pet && b.pet.name ? b.pet.name : 'Dog';
-      const serviceName = b.type === 'boarding' ? 'Doggy Hotel' : (b.service ? b.service.name : 'Service');
+      const extraNames = Array.isArray(b.extraServices) && b.extraServices.length ? ` + ${b.extraServices.map((s) => s.name).join(', ')}` : '';
+      const serviceName = b.type === 'boarding' ? `Doggy Hotel${extraNames}` : (b.service ? b.service.name : 'Service');
       const label = `${b.type === 'boarding' ? '🏨 ' : ''}${customerName.split(' ')[0]} · ${petName}`;
       return `<div class="cal-pill status-${b.status}" title="${customerName} — ${petName} — ${serviceName}">${label}</div>`;
     }).join('');

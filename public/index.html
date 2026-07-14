@@ -216,6 +216,7 @@
           <div><label>Check-out date</label><input type="date" id="boarding-checkout" required onchange="checkBoardingAvailability()"></div>
         </div>
         <div id="boarding-availability"></div>
+        <div class="form-row"><label>Extra Services</label><div id="boarding-extra-services" class="service-checklist"></div><div class="field-hint">Optional extras for this Doggy Hotel stay, billed as once-off additional services. Pet Taxi extras here do not replace the pickup/drop-off choices above.</div></div>
         <div class="form-row-2">
           <div><label>Transport pick up</label><select id="boarding-pickup"><option value="">No thanks</option><option value="am">Yes — AM pickup</option><option value="pm">Yes — PM pickup</option></select></div>
           <div><label>Transport drop off</label><select id="boarding-dropoff"><option value="">No thanks</option><option value="am">Yes — AM drop off</option><option value="pm">Yes — PM drop off</option></select></div>
@@ -267,10 +268,11 @@
   </div>
 </div>
 
-<script src="app.js?v=20260713-popia-consent"></script>
+<script src="app.js?v=20260714-boarding-extras"></script>
 <script>
 let me = null, pets = [], services = [];
 const MAX_STANDARD_SERVICES = 20;
+const MAX_BOARDING_EXTRA_SERVICES = 20;
 const PRIVACY_POLICY_VERSION = 'furrykidz-popia-v1-2026-07-13';
 function isAccommodationService(service) {
   return service && (service.category === 'Luxury Accommodation' || String(service.id || '').startsWith('la-'));
@@ -431,7 +433,9 @@ async function loadBookings() {
   bookings.forEach((b) => {
     const pet = pets.find((p) => p.id === b.petId);
     const service = services.find((s) => s.id === b.serviceId);
-    const serviceLabel = b.type === 'boarding' ? `🏨 Doggy Hotel (${b.checkInDate} → ${b.checkOutDate})` : (service ? service.name : '—');
+    const extraServices = Array.isArray(b.extraServices) ? b.extraServices : (Array.isArray(b.extraServiceIds) ? b.extraServiceIds.map((id) => services.find((s) => s.id === id)).filter(Boolean) : []);
+    const extrasLabel = extraServices.length ? ` <div class="field-hint">Extras: ${extraServices.map((s) => s.name).join(', ')}</div>` : '';
+    const serviceLabel = b.type === 'boarding' ? `🏨 Doggy Hotel (${b.checkInDate} → ${b.checkOutDate})${extrasLabel}` : (service ? service.name : '—');
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${b.date} <span style="color:var(--text3)">${b.time || ''}</span></td>
@@ -479,6 +483,32 @@ function enforceServiceSelectionLimit(e) {
     e.target.checked = false;
     toast(`You can select up to ${MAX_STANDARD_SERVICES} services per booking request.`, 'error');
   }
+}
+
+function enforceBoardingExtraSelectionLimit(e) {
+  const selected = document.querySelectorAll('input[name="boarding-extra-service"]:checked');
+  if (selected.length > MAX_BOARDING_EXTRA_SERVICES) {
+    e.target.checked = false;
+    toast(`You can select up to ${MAX_BOARDING_EXTRA_SERVICES} extra services for Doggy Hotel.`, 'error');
+  }
+}
+
+function renderBoardingExtraServices() {
+  const byCategory = {};
+  services.filter((s) => !isAccommodationService(s)).forEach((s) => { (byCategory[s.category] = byCategory[s.category] || []).push(s); });
+  document.getElementById('boarding-extra-services').innerHTML = Object.entries(byCategory).map(([cat, list]) => `
+    <div class="service-group">
+      <div class="service-group-title">${cat}</div>
+      ${list.map((s) => `
+        <label class="service-option">
+          <input type="checkbox" name="boarding-extra-service" value="${s.id}">
+          <span>${s.name}</span>
+          <strong>${fmtCurrency(s.price)}</strong>
+        </label>`).join('')}
+    </div>`).join('');
+  document.querySelectorAll('input[name="boarding-extra-service"]').forEach((checkbox) => {
+    checkbox.addEventListener('change', enforceBoardingExtraSelectionLimit);
+  });
 }
 
 async function submitBooking() {
@@ -587,6 +617,7 @@ function openBoardingModal() {
   if (!pets.length) { toast('Add a dog first before booking.', 'error'); navigate('pets'); return; }
   document.getElementById('boarding-pet').innerHTML = pets.map((p) => `<option value="${p.id}">${p.name}</option>`).join('');
   document.getElementById('boarding-location').value = me.location || 'kyalami';
+  renderBoardingExtraServices();
   document.getElementById('boarding-form').reset();
   document.getElementById('boarding-availability').innerHTML = '';
   boardingAvailable = true;
@@ -609,6 +640,7 @@ async function submitBoarding() {
       transportDropoff: !!document.getElementById('boarding-dropoff').value,
       transportPickupWindow: document.getElementById('boarding-pickup').value,
       transportDropoffWindow: document.getElementById('boarding-dropoff').value,
+      extraServiceIds: Array.from(document.querySelectorAll('input[name="boarding-extra-service"]:checked')).map((el) => el.value),
       notes: document.getElementById('boarding-notes').value,
     });
     closeBoardingModal();
