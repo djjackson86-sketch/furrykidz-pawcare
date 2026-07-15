@@ -142,7 +142,8 @@ function buildBoardingInvoiceDescription({ booking, pet, customer, nights, locat
 
   return trimInvoiceDescription([
     `Luxury Accommodation — ${pet ? pet.name : 'Dog'} (${booking.checkInDate} to ${booking.checkOutDate}, ${nights} night${nights > 1 ? 's' : ''})`,
-    `Services requested: ${requestedServices.join('; ')}`,
+    `Dog: ${pet ? pet.name : 'Dog'}`,
+    `Services: ${requestedServices.join('; ')}`,
     `Location required: ${locationName}`,
     `Client address: ${suppliedOrFallback(customer && customer.address)}`,
     `Client cell: ${suppliedOrFallback(customer && customer.phone)}`,
@@ -642,7 +643,15 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
   const notificationPet = bookingType === 'boarding'
     ? { name: selectedBoardingPetBookings.map((item) => item.pet.name || 'Dog').join(', ') }
     : pet;
-  telegram.notifyNewBooking(customer, notificationPet, newBookings, db.getServices()).catch((err) => console.warn('Telegram new-booking notification failed:', err.message));
+  const notificationBookings = bookingType === 'boarding'
+    ? newBookings.map((booking, index) => ({
+      ...booking,
+      petName: selectedBoardingPetBookings[index] && selectedBoardingPetBookings[index].pet
+        ? selectedBoardingPetBookings[index].pet.name
+        : undefined,
+    }))
+    : newBookings;
+  telegram.notifyNewBooking(customer, notificationPet, notificationBookings, db.getServices()).catch((err) => console.warn('Telegram new-booking notification failed:', err.message));
   res.json({ booking: newBookings[0], bookings: newBookings });
 });
 
@@ -847,12 +856,20 @@ app.post('/api/internal/telegram/test', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
-db.init()
-  .then(() => {
-    app.listen(PORT, () => console.log(`Furry Kidz booking system running on http://localhost:${PORT} (${db.getStorageMode()} storage)`));
-  })
-  .catch((err) => {
-    console.error('Failed to initialize storage:', err);
-    process.exit(1);
-  });
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  db.init()
+    .then(() => {
+      app.listen(PORT, () => console.log(`Furry Kidz booking system running on http://localhost:${PORT} (${db.getStorageMode()} storage)`));
+    })
+    .catch((err) => {
+      console.error('Failed to initialize storage:', err);
+      process.exit(1);
+    });
+}
+
+module.exports = {
+  app,
+  buildBoardingInvoiceDescription,
+  extraServicesForBooking,
+};

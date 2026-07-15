@@ -139,10 +139,9 @@ async function notifyNewCustomer(customer) {
   return sendMessage(text);
 }
 
-async function notifyNewBooking(customer, pet, newBookings, services) {
+function buildNewBookingNotificationText(customer, pet, newBookings, services) {
   const count = newBookings.length;
   const first = newBookings[0] || {};
-  const serviceLabels = newBookings.map((b) => serviceNameFor(b, services));
   const total = newBookings.reduce((sum, b) => {
     const p = bookingPrice(b, services);
     return p === null ? sum : sum + Number(p || 0);
@@ -150,25 +149,35 @@ async function notifyNewBooking(customer, pet, newBookings, services) {
   const transport = [];
   if (first.transportPickup) transport.push(`pickup${first.transportPickupWindow ? ` ${String(first.transportPickupWindow).toUpperCase()}` : ''}`);
   if (first.transportDropoff) transport.push(`dropoff${first.transportDropoffWindow ? ` ${String(first.transportDropoffWindow).toUpperCase()}` : ''}`);
-  const extras = first.type === 'boarding' ? extraServiceNamesFor(first, services) : [];
   const datePart = first.type === 'boarding'
     ? `${first.checkInDate || first.date}${first.checkOutDate ? ` → ${first.checkOutDate}` : ''}`
     : first.date;
+  const serviceLabels = newBookings.map((b) => serviceNameFor(b, services));
+  const dogServiceLines = first.type === 'boarding'
+    ? newBookings.map((booking) => {
+      const dogName = booking.petName || booking.dogName || booking.pet?.name || pet.name || 'Dog';
+      const names = ['Luxury Accommodation', ...extraServiceNamesFor(booking, services)];
+      return `🐶 <b>${escapeHtml(dogName)}</b>\n   Services: ${escapeHtml(names.join('; '))}`;
+    })
+    : [`🐶 ${escapeHtml(pet.name || 'Dog')}`];
   const text = [
     '🐾 <b>Furry Kidz</b>',
     '━━━━━━━━━━━━━━',
-    count === 1 ? '📋 <b>New booking request</b>' : `📋 <b>New booking request</b> (${count} services)`,
+    count === 1 ? '📋 <b>New booking request</b>' : `📋 <b>New booking request</b> (${first.type === 'boarding' ? `${count} dogs` : `${count} services`})`,
     '',
     `👤 ${escapeHtml(customer.fullName || 'Client')}${customer.phone ? ` · ${escapeHtml(customer.phone)}` : ''}`,
-    `🐶 ${escapeHtml(pet.name || 'Dog')}`,
     `📅 ${escapeHtml(datePart || '—')}${first.time ? ` ${escapeHtml(first.time)}` : ''}`,
-    `🧾 ${escapeHtml(serviceLabels.join(', '))}`,
+    first.type === 'boarding' ? dogServiceLines.join('\n') : dogServiceLines[0],
+    first.type !== 'boarding' ? `🧾 ${escapeHtml(serviceLabels.join(', '))}` : '',
     first.type !== 'boarding' ? `💰 ${money(total)}` : '',
     transport.length ? `🚐 ${escapeHtml(transport.join(' · '))}` : '',
-    extras.length ? `➕ ${escapeHtml(extras.join(', '))}` : '',
     first.notes ? `📝 ${escapeHtml(first.notes)}` : '',
   ].filter(Boolean).join('\n');
-  return sendMessage(text);
+  return text;
+}
+
+async function notifyNewBooking(customer, pet, newBookings, services) {
+  return sendMessage(buildNewBookingNotificationText(customer, pet, newBookings, services));
 }
 
 function buildDailySummary({ bookings, customers, pets, services }, targetDate = tomorrowZA()) {
@@ -230,6 +239,7 @@ module.exports = {
   sendMessage,
   notifyNewCustomer,
   notifyNewBooking,
+  buildNewBookingNotificationText,
   buildDailySummary,
   sendDailySummary,
   tomorrowZA,
