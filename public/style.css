@@ -129,6 +129,12 @@ tr:last-child td { border-bottom: none; }
 .service-option input { width: 18px; min-height: 18px; margin: 0; accent-color: var(--accent); }
 .service-option span { font-size: 13.5px; }
 .service-option strong { font-size: 12px; font-weight: 600; color: var(--text2); white-space: nowrap; }
+.boarding-pet-extras { display: grid; gap: 12px; }
+.boarding-pet-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); overflow: hidden; }
+.boarding-pet-toggle { display: flex; align-items: center; gap: 9px; padding: 10px 12px; font-weight: 600; cursor: pointer; }
+.boarding-pet-toggle input { width: 18px; min-height: 18px; margin: 0; accent-color: var(--accent); }
+.boarding-extra-list { border-width: 1px 0 0; border-radius: 0; background: var(--surface); max-height: 220px; }
+.boarding-extra-list.disabled { opacity: 0.55; }
 
 /* Mobile ergonomics: preserve the desktop look, but make every page thumb-friendly. */
 @media (max-width: 760px) {

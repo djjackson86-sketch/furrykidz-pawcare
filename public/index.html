@@ -202,12 +202,12 @@
 </div>
 
 <div class="modal-overlay" id="boarding-modal">
-  <div class="modal" style="max-width:560px">
+  <div class="modal" style="max-width:720px">
     <div class="modal-header"><div class="modal-title">Book Doggy Hotel (Boarding)</div><button class="close-btn" onclick="closeBoardingModal()">✕</button></div>
     <div class="modal-body">
       <div class="error-banner show" style="background:var(--amber-light);color:var(--amber)">We can only accept dogs with current Viral, Rabies & Kennel Cough vaccinations, sterilised (if over 6 months), and on a tick & flea preventative program. Make sure your dog's profile under "My Dogs" has these up to date before booking.</div>
       <form id="boarding-form">
-        <div class="form-row"><label>Dog</label><select id="boarding-pet" required></select></div>
+        <div class="form-row"><label>Dogs & Extra Services</label><div id="boarding-pet-extras" class="boarding-pet-extras"></div><div class="field-hint">Select one or more dogs, then choose optional extra services for each dog separately.</div></div>
         <div class="form-row"><label>Location</label>
           <select id="boarding-location" required onchange="checkBoardingAvailability()"><option value="kyalami">Kyalami</option><option value="noordwyk">Noordwyk</option></select>
         </div>
@@ -216,7 +216,6 @@
           <div><label>Check-out date</label><input type="date" id="boarding-checkout" required onchange="checkBoardingAvailability()"></div>
         </div>
         <div id="boarding-availability"></div>
-        <div class="form-row"><label>Extra Services</label><div id="boarding-extra-services" class="service-checklist"></div><div class="field-hint">Optional extras for this Doggy Hotel stay, billed as once-off additional services. Pet Taxi extras here do not replace the pickup/drop-off choices above.</div></div>
         <div class="form-row-2">
           <div><label>Transport pick up</label><select id="boarding-pickup"><option value="">No thanks</option><option value="am">Yes — AM pickup</option><option value="pm">Yes — PM pickup</option></select></div>
           <div><label>Transport drop off</label><select id="boarding-dropoff"><option value="">No thanks</option><option value="am">Yes — AM drop off</option><option value="pm">Yes — PM drop off</option></select></div>
@@ -268,7 +267,7 @@
   </div>
 </div>
 
-<script src="app.js?v=20260714-boarding-extras"></script>
+<script src="app.js?v=20260715-boarding-per-dog-extras"></script>
 <script>
 let me = null, pets = [], services = [];
 const MAX_STANDARD_SERVICES = 20;
@@ -486,29 +485,61 @@ function enforceServiceSelectionLimit(e) {
 }
 
 function enforceBoardingExtraSelectionLimit(e) {
-  const selected = document.querySelectorAll('input[name="boarding-extra-service"]:checked');
+  const petId = e.target.dataset.petId;
+  const selected = document.querySelectorAll(`input[name="boarding-extra-service"][data-pet-id="${petId}"]:checked`);
   if (selected.length > MAX_BOARDING_EXTRA_SERVICES) {
     e.target.checked = false;
-    toast(`You can select up to ${MAX_BOARDING_EXTRA_SERVICES} extra services for Doggy Hotel.`, 'error');
+    toast(`You can select up to ${MAX_BOARDING_EXTRA_SERVICES} extra services per dog for Doggy Hotel.`, 'error');
   }
 }
 
 function renderBoardingExtraServices() {
   const byCategory = {};
   services.filter((s) => !isAccommodationService(s)).forEach((s) => { (byCategory[s.category] = byCategory[s.category] || []).push(s); });
-  document.getElementById('boarding-extra-services').innerHTML = Object.entries(byCategory).map(([cat, list]) => `
+  const serviceGroups = (petId) => Object.entries(byCategory).map(([cat, list]) => `
     <div class="service-group">
       <div class="service-group-title">${cat}</div>
       ${list.map((s) => `
         <label class="service-option">
-          <input type="checkbox" name="boarding-extra-service" value="${s.id}">
+          <input type="checkbox" name="boarding-extra-service" data-pet-id="${petId}" value="${s.id}">
           <span>${s.name}</span>
           <strong>${fmtCurrency(s.price)}</strong>
         </label>`).join('')}
     </div>`).join('');
+
+  document.getElementById('boarding-pet-extras').innerHTML = pets.map((p, idx) => `
+    <div class="boarding-pet-card">
+      <label class="boarding-pet-toggle">
+        <input type="checkbox" name="boarding-pet" value="${p.id}" ${idx === 0 ? 'checked' : ''}>
+        <span>🐶 ${p.name}</span>
+      </label>
+      <div class="service-checklist boarding-extra-list" data-pet-services="${p.id}">
+        ${serviceGroups(p.id)}
+      </div>
+    </div>`).join('');
   document.querySelectorAll('input[name="boarding-extra-service"]').forEach((checkbox) => {
     checkbox.addEventListener('change', enforceBoardingExtraSelectionLimit);
   });
+  document.querySelectorAll('input[name="boarding-pet"]').forEach((checkbox) => {
+    checkbox.addEventListener('change', () => { updateBoardingPetServiceState(); checkBoardingAvailability(); });
+  });
+  updateBoardingPetServiceState();
+}
+
+function updateBoardingPetServiceState() {
+  document.querySelectorAll('input[name="boarding-pet"]').forEach((petCheckbox) => {
+    const enabled = petCheckbox.checked;
+    document.querySelectorAll(`input[name="boarding-extra-service"][data-pet-id="${petCheckbox.value}"]`).forEach((extra) => {
+      extra.disabled = !enabled;
+      if (!enabled) extra.checked = false;
+    });
+    const list = document.querySelector(`[data-pet-services="${petCheckbox.value}"]`);
+    if (list) list.classList.toggle('disabled', !enabled);
+  });
+}
+
+function selectedBoardingDogCount() {
+  return Math.max(1, document.querySelectorAll('input[name="boarding-pet"]:checked').length);
 }
 
 async function submitBooking() {
@@ -604,21 +635,23 @@ async function checkBoardingAvailability() {
   try {
     const data = await api('GET', `/api/boarding/availability?location=${location}&checkInDate=${checkIn}&checkOutDate=${checkOut}`);
     boardingAvailable = data.available;
-    if (data.available) {
-      el.innerHTML = `<div class="error-banner show" style="background:var(--green-light);color:var(--green)">✓ Available — ${data.capacity - Math.max(...data.days.map(d=>d.booked))} spot(s) free across these dates.</div>`;
+    const dogCount = selectedBoardingDogCount();
+    const minFree = Math.min(...data.days.map((d) => d.capacity - d.booked));
+    boardingAvailable = data.available && minFree >= dogCount;
+    if (boardingAvailable) {
+      el.innerHTML = `<div class="error-banner show" style="background:var(--green-light);color:var(--green)">✓ Available — ${minFree} spot(s) free across these dates.</div>`;
     } else {
-      const fullDays = data.days.filter((d) => d.full).map((d) => d.date).join(', ');
-      el.innerHTML = `<div class="error-banner show">✕ Fully booked on: ${fullDays}. Please choose different dates or another location.</div>`;
+      const fullDays = data.days.filter((d) => (d.capacity - d.booked) < dogCount).map((d) => d.date).join(', ');
+      el.innerHTML = `<div class="error-banner show">✕ Not enough Doggy Hotel space for ${dogCount} dog(s) on: ${fullDays}. Please choose different dates, fewer dogs, or another location.</div>`;
     }
   } catch (err) { el.innerHTML = ''; }
 }
 
 function openBoardingModal() {
   if (!pets.length) { toast('Add a dog first before booking.', 'error'); navigate('pets'); return; }
-  document.getElementById('boarding-pet').innerHTML = pets.map((p) => `<option value="${p.id}">${p.name}</option>`).join('');
+  document.getElementById('boarding-form').reset();
   document.getElementById('boarding-location').value = me.location || 'kyalami';
   renderBoardingExtraServices();
-  document.getElementById('boarding-form').reset();
   document.getElementById('boarding-availability').innerHTML = '';
   boardingAvailable = true;
   document.getElementById('boarding-modal').classList.add('open');
@@ -630,9 +663,14 @@ async function submitBoarding() {
   if (!form.reportValidity()) return;
   if (!boardingAvailable) { toast('Those dates are fully booked — please choose different dates.', 'error'); return; }
   try {
+    const petBookings = Array.from(document.querySelectorAll('input[name="boarding-pet"]:checked')).map((petEl) => ({
+      petId: petEl.value,
+      extraServiceIds: Array.from(document.querySelectorAll(`input[name="boarding-extra-service"][data-pet-id="${petEl.value}"]:checked`)).map((el) => el.value),
+    }));
+    if (!petBookings.length) { toast('Select at least one dog for Doggy Hotel.', 'error'); return; }
     await api('POST', '/api/bookings', {
       type: 'boarding',
-      petId: document.getElementById('boarding-pet').value,
+      petBookings,
       location: document.getElementById('boarding-location').value,
       checkInDate: document.getElementById('boarding-checkin').value,
       checkOutDate: document.getElementById('boarding-checkout').value,
@@ -640,7 +678,6 @@ async function submitBoarding() {
       transportDropoff: !!document.getElementById('boarding-dropoff').value,
       transportPickupWindow: document.getElementById('boarding-pickup').value,
       transportDropoffWindow: document.getElementById('boarding-dropoff').value,
-      extraServiceIds: Array.from(document.querySelectorAll('input[name="boarding-extra-service"]:checked')).map((el) => el.value),
       notes: document.getElementById('boarding-notes').value,
     });
     closeBoardingModal();

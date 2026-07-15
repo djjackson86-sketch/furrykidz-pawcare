@@ -532,24 +532,41 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
   const {
     petId, serviceId, serviceIds, date, time, notes,
     type, checkInDate, checkOutDate, location, transportPickup, transportDropoff,
-    transportPickupWindow, transportDropoffWindow, extraServiceIds,
+    transportPickupWindow, transportDropoffWindow, extraServiceIds, petBookings, dogs,
   } = req.body;
   const bookingType = type === 'boarding' ? 'boarding' : 'standard';
   const pickupWindow = normalizeTransportWindow(transportPickupWindow);
   const dropoffWindow = normalizeTransportWindow(transportDropoffWindow);
+  let boardingPetBookings = [];
 
   if (bookingType === 'boarding') {
-    if (!petId || !checkInDate || !checkOutDate) {
-      return res.status(400).json({ error: 'Dog, check-in date and check-out date are required for boarding.' });
+    const requestedPetBookings = Array.isArray(petBookings) ? petBookings : (Array.isArray(dogs) ? dogs : []);
+    boardingPetBookings = requestedPetBookings.length
+      ? requestedPetBookings.map((item) => ({ petId: item && item.petId, extraServiceIds: item && item.extraServiceIds }))
+      : [{ petId, extraServiceIds }];
+    boardingPetBookings = boardingPetBookings
+      .map((item) => ({ petId: String((item && item.petId) || '').trim(), extraServiceIds: item && item.extraServiceIds }))
+      .filter((item) => item.petId);
+    const duplicatePetIds = new Set();
+    const uniquePetBookings = [];
+    boardingPetBookings.forEach((item) => {
+      if (!duplicatePetIds.has(item.petId)) {
+        duplicatePetIds.add(item.petId);
+        uniquePetBookings.push(item);
+      }
+    });
+    boardingPetBookings = uniquePetBookings;
+    if (!boardingPetBookings.length || !checkInDate || !checkOutDate) {
+      return res.status(400).json({ error: 'At least one dog, check-in date and check-out date are required for boarding.' });
     }
     const loc = location || 'kyalami';
     const locConfig = db.getLocations().find((l) => l.id === loc);
     const capacity = locConfig ? locConfig.boardingCapacity : 15;
     const nights = nightsBetween(checkInDate, checkOutDate);
     const counts = boardingOccupancy(loc, nights);
-    const fullDays = nights.filter((n) => (counts[n] || 0) >= capacity);
+    const fullDays = nights.filter((n) => ((counts[n] || 0) + boardingPetBookings.length) > capacity);
     if (fullDays.length) {
-      return res.status(409).json({ error: `${locConfig ? locConfig.name : loc} is fully booked for the doggy hotel on ${fullDays.join(', ')}. Please choose different dates or another location.` });
+      return res.status(409).json({ error: `${locConfig ? locConfig.name : loc} does not have enough Doggy Hotel space for ${boardingPetBookings.length} dog(s) on ${fullDays.join(', ')}. Please choose different dates, fewer dogs, or another location.` });
     }
   } else {
     const selectedServiceIds = Array.isArray(serviceIds) ? serviceIds : (serviceId ? [serviceId] : []);
@@ -561,14 +578,23 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
     }
   }
 
-  const pet = db.getPets().find((p) => p.id === petId && p.customerId === req.session.customerId);
-  if (!pet) return res.status(400).json({ error: 'Invalid dog selected.' });
+  const customerPets = db.getPets().filter((p) => p.customerId === req.session.customerId);
+  const pet = bookingType === 'boarding' ? null : customerPets.find((p) => p.id === petId);
+  if (bookingType === 'standard' && !pet) return res.status(400).json({ error: 'Invalid dog selected.' });
 
   let selectedServices = [];
-  let selectedExtraServiceIds = [];
+  let selectedBoardingPetBookings = [];
   if (bookingType === 'boarding') {
     try {
-      selectedExtraServiceIds = normalizeExtraServiceIds(extraServiceIds).ids;
+      selectedBoardingPetBookings = boardingPetBookings.map((item) => {
+        const bookingPet = customerPets.find((p) => p.id === item.petId);
+        if (!bookingPet) {
+          const err = new Error('Invalid dog selected.');
+          err.status = 400;
+          throw err;
+        }
+        return { pet: bookingPet, extraServiceIds: normalizeExtraServiceIds(item.extraServiceIds).ids };
+      });
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message || 'Invalid extra services selected.' });
     }
@@ -583,10 +609,10 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
   }
 
   const bookings = db.getBookings();
-  const makeBooking = (selectedServiceId = null) => ({
+  const makeBooking = (selectedServiceId = null, bookingPet = pet, bookingExtraServiceIds = []) => ({
     id: randomUUID().slice(0, 8),
     customerId: req.session.customerId,
-    petId,
+    petId: bookingPet.id,
     type: bookingType,
     serviceId: selectedServiceId,
     date: bookingType === 'boarding' ? checkInDate : date,
@@ -598,7 +624,7 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
     transportDropoff: !!transportDropoff || !!dropoffWindow,
     transportPickupWindow: pickupWindow,
     transportDropoffWindow: dropoffWindow,
-    extraServiceIds: bookingType === 'boarding' ? selectedExtraServiceIds : [],
+    extraServiceIds: bookingType === 'boarding' ? bookingExtraServiceIds : [],
     collectionNotes: '', // staff-only notes for picking the dog up
     dropoffNotes: '', // staff-only notes for dropping the dog off
     notes: notes || '',
@@ -608,12 +634,15 @@ app.post('/api/bookings', requireCustomer, (req, res) => {
     createdAt: new Date().toISOString(),
   });
   const newBookings = bookingType === 'standard'
-    ? selectedServices.map((s) => makeBooking(s.id))
-    : [makeBooking(null)];
+    ? selectedServices.map((s) => makeBooking(s.id, pet, []))
+    : selectedBoardingPetBookings.map((item) => makeBooking(null, item.pet, item.extraServiceIds));
   bookings.push(...newBookings);
   db.saveBookings(bookings);
   const customer = db.getCustomers().find((c) => c.id === req.session.customerId) || {};
-  telegram.notifyNewBooking(customer, pet, newBookings, db.getServices()).catch((err) => console.warn('Telegram new-booking notification failed:', err.message));
+  const notificationPet = bookingType === 'boarding'
+    ? { name: selectedBoardingPetBookings.map((item) => item.pet.name || 'Dog').join(', ') }
+    : pet;
+  telegram.notifyNewBooking(customer, notificationPet, newBookings, db.getServices()).catch((err) => console.warn('Telegram new-booking notification failed:', err.message));
   res.json({ booking: newBookings[0], bookings: newBookings });
 });
 
